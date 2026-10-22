@@ -299,6 +299,7 @@ class Scheduler:
                     self._set_error(entity_id, "entity_unavailable", "Climate entity is unavailable; target is pending")
                     continue
                 try:
+                    step_override = None
                     if mode is not None:
                         _validate_hvac_mode(state, mode)
                     if target is not None and mode != "off":
@@ -318,7 +319,8 @@ class Scheduler:
                         }, blocking=True)
                     if target is not None and mode != "off":
                         current = state.attributes.get("temperature")
-                        if target_needs_update(current, target, _step(state)):
+                        comparison_step = step_override if step_override is not None else _step(state)
+                        if target_needs_update(current, target, comparison_step):
                             await self.hass.services.async_call("climate", "set_temperature", {
                                 "entity_id": entity_id, "temperature": target,
                             }, blocking=True)

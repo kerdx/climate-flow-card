@@ -197,6 +197,21 @@ class ScheduleTests(unittest.TestCase):
         # a validation error blocks the program.
         self.assertIn("if config_changed and validation_blocked:", source)
 
+    def test_explicit_override_step_short_circuits_native_step_for_comparison(self):
+        source = (ROOT / "custom_components/climate_flow_scheduler/__init__.py").read_text(encoding="utf-8")
+        module = ast.parse(source)
+        evaluator = next(node for node in ast.walk(module) if isinstance(node, ast.AsyncFunctionDef) and node.name == "async_evaluate")
+        comparison = next(node for node in ast.walk(evaluator) if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "target_needs_update")
+        self.assertIsInstance(comparison.args[2], ast.Name)
+        self.assertEqual(comparison.args[2].id, "comparison_step")
+        assignment = next(node for node in ast.walk(evaluator) if isinstance(node, ast.Assign) and any(isinstance(t, ast.Name) and t.id == "comparison_step" for t in node.targets))
+        self.assertIsInstance(assignment.value, ast.IfExp)
+        self.assertIsInstance(assignment.value.test, ast.Compare)
+        self.assertIsInstance(assignment.value.body, ast.Name)
+        self.assertEqual(assignment.value.body.id, "step_override")
+        self.assertIsInstance(assignment.value.orelse, ast.Call)
+        self.assertEqual(assignment.value.orelse.func.id, "_step")
+
     def test_readme_outside_slot_rule_separates_mode_call_from_target(self):
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
         normalized_readme = readme.casefold().replace("**", "")
