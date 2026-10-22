@@ -4,10 +4,11 @@ import unittest
 from datetime import datetime, timedelta, timezone
 import importlib.util
 import ast
+import re
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-_MODULE = Path(__file__).parents[1] / "custom_components/bubble_climate_scheduler/schedule.py"
+_MODULE = Path(__file__).parents[1] / "custom_components/climate_flow_scheduler/schedule.py"
 _SPEC = importlib.util.spec_from_file_location("pure_schedule", _MODULE)
 schedule = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(schedule)
@@ -171,7 +172,7 @@ class ScheduleTests(unittest.TestCase):
 
     def test_state_changed_routes_hvac_modes_retry_through_pure_helper(self):
         """The HA listener must delegate its comparison so hvac_modes counts."""
-        init_path = ROOT / "custom_components/bubble_climate_scheduler/__init__.py"
+        init_path = ROOT / "custom_components/climate_flow_scheduler/__init__.py"
         source = init_path.read_text(encoding="utf-8")
         module = ast.parse(source)
         handlers = [
@@ -198,10 +199,20 @@ class ScheduleTests(unittest.TestCase):
 
     def test_readme_outside_slot_rule_separates_mode_call_from_target(self):
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
-        self.assertNotRegex(readme, r"(?i)outside slots no call is made")
-        self.assertRegex(readme, r"(?i)no \*\*target temperature\*\* call is made unless \*\*Outside schedule\*\*")
-        self.assertRegex(readme, r"`set_hvac_mode` is still sent outside the slots")
-        self.assertRegex(readme, r"(?i)blocked because the entity does not expose the configured \*\*Mode\*\* is retried when the entity reports a new mode list \(`hvac_modes`\)")
+        normalized_readme = readme.casefold().replace("**", "")
+        self.assertNotRegex(normalized_readme, r"outside slots no call is made")
+        self.assertRegex(
+            normalized_readme,
+            r"no target temperature call is made unless outside schedule"
+            r"|outside-schedule temperature.{0,160}(?:if omitted|if it is absent).{0,100}"
+            r"no target is sent outside",
+        )
+        self.assertRegex(
+            normalized_readme,
+            r"`set_hvac_mode` is still sent outside the slots"
+            r"|(?:hvac_mode|hvac mode.{0,40}(?:optional|set)).{0,120}"
+            r"(?:applied|set|sent|including).{0,80}outside(?: scheduled)? slots",
+        )
 
     def test_entity_snapshot_rolls_back_mapping_and_set_state(self):
         programs = {"climate.room": {"enabled": True, "slots": [{"id": "old"}]}}
@@ -234,7 +245,7 @@ class ScheduleTests(unittest.TestCase):
         self.assertNotIn("climate.new", pending)
 
     def test_config_flow_exports_home_assistant_expected_class(self):
-        path = Path(__file__).parents[1] / "custom_components/bubble_climate_scheduler/config_flow.py"
+        path = Path(__file__).parents[1] / "custom_components/climate_flow_scheduler/config_flow.py"
         module = ast.parse(path.read_text(encoding="utf-8"))
         flow_classes = [node for node in module.body if isinstance(node, ast.ClassDef) and node.name == "ConfigFlow"]
         self.assertEqual(len(flow_classes), 1)

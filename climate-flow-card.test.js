@@ -1,17 +1,17 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { BubbleClimateCard, BubbleClimateCardEditor, BUBBLE_CLIMATE_CARD_TAG, BUBBLE_CLIMATE_CARD_EDITOR_TAG, CLIMATE_FLOW_CARD_TAG, CLIMATE_FLOW_CARD_EDITOR_TAG, registerBubbleClimateElements, isBubbleClimateElementsRegistered, isHomeAssistantFrontendReady, scheduleBubbleClimateReregistration, clampTarget, temperaturePayload, targetModel, hvacToggleMode, scheduleDraft, validateScheduleDraft, defaultCardConfig, configSchema, configSchemaFields, getEntitySuggestion, sameCardConfig, errorLabel, effectiveStep, normalizeLayout, isClimateActive, isScheduleEnabled, awayTemperaturePayload, schedulableModes, presetModes, presetServicePayload, manualOverrideServicePayload, overrideDurationChoices, formatOverrideExpiry, overrideFocusSelector, climateStatusKey, statusLabel, modeLabel, resolveLanguage, cardStrings, fieldLabel, pickEntityTimestamp, formatRelativeTime, formatNumber, rowStatusParts, currentTemperatureDisplay } from './custom_components/bubble_climate_scheduler/www/bubble-climate-card.js';
+import { ClimateFlowCard, ClimateFlowCardEditor, CLIMATE_FLOW_CARD_TAG, CLIMATE_FLOW_CARD_EDITOR_TAG, registerClimateFlowElements, isClimateFlowElementsRegistered, isHomeAssistantFrontendReady, scheduleClimateFlowReregistration, clampTarget, temperaturePayload, targetModel, hvacToggleMode, scheduleDraft, validateScheduleDraft, defaultCardConfig, configSchema, configSchemaFields, getEntitySuggestion, sameCardConfig, errorLabel, effectiveStep, normalizeLayout, isClimateActive, isScheduleEnabled, awayTemperaturePayload, schedulableModes, presetModes, presetServicePayload, manualOverrideServicePayload, overrideDurationChoices, formatOverrideExpiry, overrideFocusSelector, climateStatusKey, statusLabel, modeLabel, resolveLanguage, cardStrings, fieldLabel, pickEntityTimestamp, formatRelativeTime, formatNumber, pillStatusParts, currentTemperatureDisplay } from './custom_components/climate_flow_scheduler/www/climate-flow-card.js';
 
 test('module imports without browser DOM and exports the card class', () => {
-  assert.equal(typeof BubbleClimateCard, 'function');
+  assert.equal(typeof ClimateFlowCard, 'function');
   assert.equal(typeof clampTarget, 'function');
 });
 
-test('row status and temperatures preserve readable separators and spacing', () => {
-  assert.deepEqual(rowStatusParts({ statusText: 'Off', relativeText: '1 hour ago' }), ['Off', '1 hour ago']);
+test('pill status and temperatures preserve readable separators and spacing', () => {
+  assert.deepEqual(pillStatusParts({ statusText: 'Off', relativeText: '1 hour ago' }), ['Off', '1 hour ago']);
   assert.equal(currentTemperatureDisplay(20.5, '°C', 'it-IT'), `${formatNumber(20.5, 'it-IT')} °C`);
-  const source = readFileSync(new URL('./custom_components/bubble_climate_scheduler/www/bubble-climate-card.js', import.meta.url), 'utf8');
+  const source = readFileSync(new URL('./custom_components/climate_flow_scheduler/www/climate-flow-card.js', import.meta.url), 'utf8');
   assert.match(source, /\.status-line span\+span:before\{content:' · '/);
   assert.match(source, /overflow-x:auto;overflow-y:hidden;overscroll-behavior-inline:contain/);
   assert.match(source, /\.meta\{flex:1 1 0;min-width:0/);
@@ -39,14 +39,14 @@ test('editor schema exposes climate entity and all supported visual options', ()
   assert.deepEqual(fields[0].selector.entity, { filter: { domain: ['climate'] } });
   const names = fields.map((entry) => entry.name);
   for (const name of ['entity', 'name', 'icon', 'layout', 'step', 'show_state_chip', 'show_current_temperature_chip', 'show_humidity_chip', 'show_unavailable_badge', 'show_mode_buttons', 'show_step_controls', 'show_schedule_button', 'show_preset_modes']) assert.ok(names.includes(name));
-  assert.deepEqual(fields.find((entry) => entry.name === 'layout').selector, { select: { mode: 'dropdown', options: ['bubble', 'compact'] } });
+  assert.deepEqual(fields.find((entry) => entry.name === 'layout').selector, { select: { mode: 'dropdown', options: ['pill', 'compact'] } });
   assert.deepEqual(defaultCardConfig('climate.living_room'), {
-    entity: 'climate.living_room', layout: 'bubble',
+    entity: 'climate.living_room', layout: 'pill',
     show_state_chip: true, show_current_temperature_chip: true, show_humidity_chip: false,
     show_unavailable_badge: true, show_mode_buttons: true, show_step_controls: true, show_schedule_button: true, show_preset_modes: true,
   });
-  assert.equal(typeof BubbleClimateCard.getStubConfig, 'function');
-  assert.equal(typeof BubbleClimateCard.getConfigElement, 'function');
+  assert.equal(typeof ClimateFlowCard.getStubConfig, 'function');
+  assert.equal(typeof ClimateFlowCard.getConfigElement, 'function');
 });
 
 test('preset modes are exposed only from advertised native options and localized override actions exist', () => {
@@ -68,7 +68,7 @@ test('preset modes are exposed only from advertised native options and localized
   assert.match(formatOverrideExpiry('2026-01-01T12:00:00Z', 'en'), /2026/);
   assert.equal(overrideFocusSelector(true, null), '.slider');
   assert.equal(overrideFocusSelector(false, '0.5'), '[data-delta="0.5"]');
-  const source = readFileSync(new URL('./custom_components/bubble_climate_scheduler/www/bubble-climate-card.js', import.meta.url), 'utf8');
+  const source = readFileSync(new URL('./custom_components/climate_flow_scheduler/www/climate-flow-card.js', import.meta.url), 'utf8');
   assert.match(source, /set_preset_mode/);
   assert.match(source, /presetServicePayload\(c\.entity,e,ev\.target\.value\)/);
   assert.match(source, /set_manual_override/);
@@ -81,7 +81,7 @@ test('preset modes are exposed only from advertised native options and localized
 });
 
 test('card service wrapper consumes rejections and exposes them for accessible reporting', async () => {
-  const card = new BubbleClimateCard();
+  const card = new ClimateFlowCard();
   const reported = [];
   card._hass = { callService: async () => { throw new Error('service unavailable'); } };
   card._showServiceError = (error) => reported.push(error.message);
@@ -103,9 +103,9 @@ test('sameCardConfig compares shallow configs so the editor can skip re-renderin
 });
 
 test('editor builds the form once and never resets the shadow root (static check, no rendering)', () => {
-  const source = readFileSync(new URL('./custom_components/bubble_climate_scheduler/www/bubble-climate-card.js', import.meta.url), 'utf8');
-  const start = source.indexOf('export class BubbleClimateCardEditor');
-  const end = source.indexOf('export class BubbleClimateCard extends');
+  const source = readFileSync(new URL('./custom_components/climate_flow_scheduler/www/climate-flow-card.js', import.meta.url), 'utf8');
+  const start = source.indexOf('export class ClimateFlowCardEditor');
+  const end = source.indexOf('export class ClimateFlowCard extends');
   assert.ok(start !== -1 && end !== -1 && start < end);
   const editor = source.slice(start, end);
   assert.doesNotMatch(editor, /shadowRoot\.innerHTML\s*=/);
@@ -115,9 +115,9 @@ test('editor builds the form once and never resets the shadow root (static check
 });
 
 test('editor serves grouped forms with helpers and an inert live preview', () => {
-  const source = readFileSync(new URL('./custom_components/bubble_climate_scheduler/www/bubble-climate-card.js', import.meta.url), 'utf8');
-  const start = source.indexOf('export class BubbleClimateCardEditor');
-  const end = source.indexOf('export class BubbleClimateCard extends');
+  const source = readFileSync(new URL('./custom_components/climate_flow_scheduler/www/climate-flow-card.js', import.meta.url), 'utf8');
+  const start = source.indexOf('export class ClimateFlowCardEditor');
+  const end = source.indexOf('export class ClimateFlowCard extends');
   const editor = source.slice(start, end);
   // hui-form covers grouped schemas; ha-form stays as the standalone fallback.
   assert.match(editor, /customElements\?\.get\?\.\('hui-form'\) \? 'hui-form' : 'ha-form'/);
@@ -136,8 +136,8 @@ test('entity suggestion targets climate entities only and includes card type and
     type: 'custom:climate-flow-card', ...defaultCardConfig('climate.living_room'),
   });
   assert.equal(getEntitySuggestion({}, 'light.living_room'), null);
-  assert.deepEqual(BubbleClimateCard.getStubConfig({ states: {} }), defaultCardConfig('climate.example'));
-  assert.equal(Object.hasOwn(BubbleClimateCard.getStubConfig({ states: {} }), 'type'), false);
+  assert.deepEqual(ClimateFlowCard.getStubConfig({ states: {} }), defaultCardConfig('climate.example'));
+  assert.equal(Object.hasOwn(ClimateFlowCard.getStubConfig({ states: {} }), 'type'), false);
 });
 
 test('target is bounded and rounded to entity step', () => {
@@ -191,7 +191,7 @@ test('an explicitly configured step overrides the entity step', () => {
 // setConfig only needs attachShadow: with no shadowRoot _render returns early,
 // so the card's step handling can be exercised without a DOM.
 const configuredCard = (config) => {
-  const card = new BubbleClimateCard();
+  const card = new ClimateFlowCard();
   card.attachShadow = () => {};
   card.setConfig(config);
   return card;
@@ -200,11 +200,11 @@ const configuredCard = (config) => {
 test('new card presets carry no explicit step, so the entity step stays effective', () => {
   // The preset is not an override: an absent `step` key keeps target_temp_step
   // in charge and leaves 0.5 as the runtime fallback only.
-  for (const preset of [defaultCardConfig('climate.living_room'), BubbleClimateCard.getStubConfig({ states: {} }), getEntitySuggestion({}, 'climate.living_room')]) {
+  for (const preset of [defaultCardConfig('climate.living_room'), ClimateFlowCard.getStubConfig({ states: {} }), getEntitySuggestion({}, 'climate.living_room')]) {
     assert.equal(Object.hasOwn(preset, 'step'), false);
     assert.equal(preset.step, undefined);
   }
-  const stubCard = configuredCard(BubbleClimateCard.getStubConfig({ states: {} }));
+  const stubCard = configuredCard(ClimateFlowCard.getStubConfig({ states: {} }));
   assert.equal(stubCard._stepOverride, null);
   assert.equal(stubCard.config.step, 0.5);
   assert.equal(effectiveStep({ attributes: { target_temp_step: 1 } }, stubCard.config.step, stubCard._stepOverride), 1);
@@ -284,17 +284,17 @@ test('schedule draft conversion and validation', () => {
   assert.ok(validateScheduleDraft({ slots: [{ ...draft.slots[0], temperature: '' }] }));
 });
 
-test('bubble is the default layout and row remains a legacy alias', () => {
-  assert.equal(normalizeLayout(undefined), 'bubble');
-  assert.equal(normalizeLayout(null), 'bubble');
-  assert.equal(normalizeLayout(''), 'bubble');
-  assert.equal(normalizeLayout('row'), 'bubble');
-  assert.equal(normalizeLayout('bubble'), 'bubble');
+test('pill and compact are the only supported layouts', () => {
+  assert.equal(normalizeLayout(undefined), 'pill');
+  assert.equal(normalizeLayout(null), 'pill');
+  assert.equal(normalizeLayout(''), 'pill');
+  assert.equal(normalizeLayout('pill'), 'pill');
+  assert.equal(normalizeLayout('row'), null);
   assert.equal(normalizeLayout('compact'), 'compact');
   assert.equal(normalizeLayout('tall'), null);
-  assert.equal(defaultCardConfig('climate.living_room').layout, 'bubble');
-  assert.equal(BubbleClimateCard.getStubConfig({ states: {} }).layout, 'bubble');
-  assert.equal(getEntitySuggestion({}, 'climate.living_room').layout, 'bubble');
+  assert.equal(defaultCardConfig('climate.living_room').layout, 'pill');
+  assert.equal(ClimateFlowCard.getStubConfig({ states: {} }).layout, 'pill');
+  assert.equal(getEntitySuggestion({}, 'climate.living_room').layout, 'pill');
 });
 
 test('program HVAC mode is validated and filtered to schedulable modes', () => {
@@ -325,11 +325,11 @@ test('outside-schedule temperature validation and payload', () => {
   for (const empty of ['', '   ', null, undefined, 'unknown']) assert.equal(awayTemperaturePayload(empty), null);
 });
 
-test('bubble schedule pill is a sibling of temperature controls in markup', () => {
-  const source = readFileSync(new URL('./custom_components/bubble_climate_scheduler/www/bubble-climate-card.js', import.meta.url), 'utf8');
-  const bubbleSection = source.slice(source.indexOf('  _renderRow() {'), source.indexOf('  _renderCompact() {'));
-  assert.match(bubbleSection, /<div class="controls"><\/div><button class="schedule"/);
-  assert.doesNotMatch(bubbleSection, /controls\.append\(schedule\)/);
+test('pill schedule pill is a sibling of temperature controls in markup', () => {
+  const source = readFileSync(new URL('./custom_components/climate_flow_scheduler/www/climate-flow-card.js', import.meta.url), 'utf8');
+  const pillSection = source.slice(source.indexOf('  _renderPill() {'), source.indexOf('  _renderCompact() {'));
+  assert.match(pillSection, /<div class="controls"><\/div><button class="schedule"/);
+  assert.doesNotMatch(pillSection, /controls\.append\(schedule\)/);
 });
 
 test('climate active state distinguishes running modes from off and unavailable', () => {
@@ -395,7 +395,7 @@ test('UI strings follow the Home Assistant locale with an English fallback', () 
 });
 
 test('schedule day pills use unique short labels while aria-labels stay complete', () => {
-  const source = readFileSync(new URL('./custom_components/bubble_climate_scheduler/www/bubble-climate-card.js', import.meta.url), 'utf8');
+  const source = readFileSync(new URL('./custom_components/climate_flow_scheduler/www/climate-flow-card.js', import.meta.url), 'utf8');
   for (const language of ['en', 'it']) {
     const strings = cardStrings(language);
     assert.equal(strings.dayPills.length, 7, `${language} pill labels`);
@@ -478,7 +478,7 @@ test('relative time falls back to short English without locale or Intl', (t) => 
   assert.equal(formatRelativeTime('2026-10-09T12:00:00Z', now, 'it-IT'), '3 d ago');
 });
 
-test('row numbers localize with hass locale while compact keeps raw output', (t) => {
+test('pill numbers localize with hass locale while compact keeps raw output', (t) => {
   assert.equal(formatNumber(20.5), '20.5');
   assert.equal(formatNumber(20), '20');
   assert.equal(formatNumber('20.5'), '20.5');
@@ -501,25 +501,25 @@ test('row numbers localize with hass locale while compact keeps raw output', (t)
   assert.ok(seen.some(([locale, options]) => locale === 'it-IT' && options?.maximumFractionDigits === 2));
 });
 
-test('row status parts keep humidity independent of the state chip', (t) => {
+test('pill status parts keep humidity independent of the state chip', (t) => {
   assert.deepEqual(
-    rowStatusParts({ statusText: 'Heating', humidityValue: 55, relativeText: '2 h ago', showStateChip: true, showHumidityChip: true }),
+    pillStatusParts({ statusText: 'Heating', humidityValue: 55, relativeText: '2 h ago', showStateChip: true, showHumidityChip: true }),
     ['Heating', '55%', '2 h ago'],
   );
   assert.deepEqual(
-    rowStatusParts({ statusText: 'Heating', humidityValue: 55, relativeText: '2 h ago', showStateChip: false, showHumidityChip: true }),
+    pillStatusParts({ statusText: 'Heating', humidityValue: 55, relativeText: '2 h ago', showStateChip: false, showHumidityChip: true }),
     ['55%'],
   );
   assert.deepEqual(
-    rowStatusParts({ statusText: 'Heating', humidityValue: 55, relativeText: '2 h ago', showStateChip: false, showHumidityChip: false }),
+    pillStatusParts({ statusText: 'Heating', humidityValue: 55, relativeText: '2 h ago', showStateChip: false, showHumidityChip: false }),
     [],
   );
   assert.deepEqual(
-    rowStatusParts({ statusText: '', humidityValue: null, relativeText: '', showStateChip: true, showHumidityChip: true }),
+    pillStatusParts({ statusText: '', humidityValue: null, relativeText: '', showStateChip: true, showHumidityChip: true }),
     [],
   );
   assert.deepEqual(
-    rowStatusParts({ statusText: 'Heating', humidityValue: null, relativeText: '2 h ago', showStateChip: true, showHumidityChip: true }),
+    pillStatusParts({ statusText: 'Heating', humidityValue: null, relativeText: '2 h ago', showStateChip: true, showHumidityChip: true }),
     ['Heating', '2 h ago'],
   );
   const RealNf = globalThis.Intl.NumberFormat;
@@ -533,38 +533,38 @@ test('row status parts keep humidity independent of the state chip', (t) => {
   globalThis.Intl.NumberFormat = FakeNf;
   t.after(() => { globalThis.Intl.NumberFormat = RealNf; });
   assert.deepEqual(
-    rowStatusParts({ statusText: 'Heating', humidityValue: 20.5, relativeText: '', showStateChip: false, showHumidityChip: true, locale: 'it-IT' }),
+    pillStatusParts({ statusText: 'Heating', humidityValue: 20.5, relativeText: '', showStateChip: false, showHumidityChip: true, locale: 'it-IT' }),
     ['20,5%'],
   );
 });
 
-test('row shadow CSS scopes a hidden rule to .row (static presence check, no rendering)', () => {
-  // No DOM available here, so verify the row shadow CSS statically: an
-  // explicit `.row [hidden]` rule must beat the author `.current`/`.controls`
+test('pill shadow CSS scopes a hidden rule to .pill (static presence check, no rendering)', () => {
+  // No DOM available here, so verify the pill shadow CSS statically: an
+  // explicit `.pill [hidden]` rule must beat the author `.current`/`.controls`
   // display declarations (which otherwise override the UA `[hidden] none`).
-  const source = readFileSync(new URL('./custom_components/bubble_climate_scheduler/www/bubble-climate-card.js', import.meta.url), 'utf8');
-  const rowStart = source.indexOf('  _renderRow() {');
+  const source = readFileSync(new URL('./custom_components/climate_flow_scheduler/www/climate-flow-card.js', import.meta.url), 'utf8');
+  const pillStart = source.indexOf('  _renderPill() {');
   const compactStart = source.indexOf('  _renderCompact() {');
-  assert.ok(rowStart !== -1 && compactStart !== -1 && rowStart < compactStart);
-  const rowSection = source.slice(rowStart, compactStart);
-  assert.match(rowSection, /\.row\s*\[hidden\][^{]*\{[^}]*display\s*:\s*none\s*!important/);
+  assert.ok(pillStart !== -1 && compactStart !== -1 && pillStart < compactStart);
+  const pillSection = source.slice(pillStart, compactStart);
+  assert.match(pillSection, /\.pill\s*\[hidden\][^{]*\{[^}]*display\s*:\s*none\s*!important/);
   const compactSection = source.slice(compactStart);
-  assert.doesNotMatch(compactSection, /\.row\s*\[hidden\]/);
+  assert.doesNotMatch(compactSection, /\.pill\s*\[hidden\]/);
 });
 
 test('calendar button accent CSS exists per layout (static presence check, no rendering)', () => {
   // The calendar button is tinted with the same accent used by the active
   // current-temperature chip when the schedule program is enabled; verify the
   // rule is present and scoped in both layouts without rendering.
-  const source = readFileSync(new URL('./custom_components/bubble_climate_scheduler/www/bubble-climate-card.js', import.meta.url), 'utf8');
-  const rowStart = source.indexOf('  _renderRow() {');
+  const source = readFileSync(new URL('./custom_components/climate_flow_scheduler/www/climate-flow-card.js', import.meta.url), 'utf8');
+  const pillStart = source.indexOf('  _renderPill() {');
   const compactStart = source.indexOf('  _renderCompact() {');
-  assert.ok(rowStart !== -1 && compactStart !== -1 && rowStart < compactStart);
-  const rowSection = source.slice(rowStart, compactStart);
+  assert.ok(pillStart !== -1 && compactStart !== -1 && pillStart < compactStart);
+  const pillSection = source.slice(pillStart, compactStart);
   const compactSection = source.slice(compactStart);
-  assert.match(rowSection, /\.schedule\[data-active="true"\][^{]*\{[^}]*var\(--bubble-accent-color,var\(--primary-color\)\)/);
-  assert.match(compactSection, /\.head \.schedule\[data-active="true"\][^{]*\{[^}]*var\(--bubble-accent-color,var\(--primary-color\)\)/);
-  assert.match(rowSection, /schedule\.dataset\.active = scheduleActive/);
+  assert.match(pillSection, /\.schedule\[data-active="true"\][^{]*\{[^}]*var\(--climate-flow-accent-color,var\(--primary-color\)\)/);
+  assert.match(compactSection, /\.head \.schedule\[data-active="true"\][^{]*\{[^}]*var\(--climate-flow-accent-color,var\(--primary-color\)\)/);
+  assert.match(pillSection, /schedule\.dataset\.active = scheduleActive/);
   assert.match(compactSection, /schedule\.dataset\.active = scheduleActive/);
 });
 
@@ -620,13 +620,13 @@ test('card registration is idempotent in the same registry', (t) => {
   const registry = fakeRegistry();
   const win = { customCards: [] };
   withBrowserStubs(t, { registry, win });
-  assert.equal(registerBubbleClimateElements(), true);
-  assert.equal(registerBubbleClimateElements(), true);
-  assert.equal(registry.get(CLIMATE_FLOW_CARD_TAG), BubbleClimateCard);
-  assert.equal(registry.get(CLIMATE_FLOW_CARD_EDITOR_TAG), BubbleClimateCardEditor);
-  assert.ok(registry.get(BUBBLE_CLIMATE_CARD_TAG)?.prototype instanceof BubbleClimateCard);
-  assert.ok(registry.get(BUBBLE_CLIMATE_CARD_EDITOR_TAG)?.prototype instanceof BubbleClimateCardEditor);
-  assert.equal(isBubbleClimateElementsRegistered(), true);
+  assert.equal(registerClimateFlowElements(), true);
+  assert.equal(registerClimateFlowElements(), true);
+  assert.equal(registry.get(CLIMATE_FLOW_CARD_TAG), ClimateFlowCard);
+  assert.equal(registry.get(CLIMATE_FLOW_CARD_EDITOR_TAG), ClimateFlowCardEditor);
+  assert.equal(registry.get(CLIMATE_FLOW_CARD_TAG), ClimateFlowCard);
+  assert.equal(registry.get(CLIMATE_FLOW_CARD_EDITOR_TAG), ClimateFlowCardEditor);
+  assert.equal(isClimateFlowElementsRegistered(), true);
   assert.equal(win.customCards.filter((card) => card?.type === 'climate-flow-card').length, 1);
 });
 
@@ -646,8 +646,8 @@ test('window.customCards entry is preserved without customElements', (t) => {
     if (prevWindow === undefined) delete globalThis.window;
     else globalThis.window = prevWindow;
   });
-  assert.equal(registerBubbleClimateElements(), false);
-  assert.equal(registerBubbleClimateElements(), false);
+  assert.equal(registerClimateFlowElements(), false);
+  assert.equal(registerClimateFlowElements(), false);
   assert.equal(win.customCards.filter((card) => card?.type === 'climate-flow-card').length, 1);
 });
 
@@ -655,26 +655,22 @@ test('card re-registers in a replaced scoped registry once the frontend is ready
   const win = { customCards: [] };
   const nativeRegistry = fakeRegistry();
   withBrowserStubs(t, { registry: nativeRegistry, win });
-  assert.equal(registerBubbleClimateElements(), true);
-  assert.equal(nativeRegistry.get(CLIMATE_FLOW_CARD_TAG), BubbleClimateCard);
-  assert.ok(nativeRegistry.get(BUBBLE_CLIMATE_CARD_TAG)?.prototype instanceof BubbleClimateCard);
-  // Scoped polyfill replaces window.customElements: fresh registry that only
+  assert.equal(registerClimateFlowElements(), true);
+  assert.equal(nativeRegistry.get(CLIMATE_FLOW_CARD_TAG), ClimateFlowCard);
+    // Scoped polyfill replaces window.customElements: fresh registry that only
   // knows the app bundle element, reproducing customElements.get(card) holes.
   class HomeAssistantElement {}
   const scopedRegistry = fakeRegistry({ 'home-assistant': HomeAssistantElement });
   globalThis.customElements = scopedRegistry;
   assert.equal(isHomeAssistantFrontendReady(), true);
-  assert.equal(scopedRegistry.get('bubble-climate-card'), undefined);
-  assert.equal(registerBubbleClimateElements(), true);
-  assert.equal(scopedRegistry.get(CLIMATE_FLOW_CARD_TAG), BubbleClimateCard);
-  assert.equal(scopedRegistry.get(CLIMATE_FLOW_CARD_EDITOR_TAG), BubbleClimateCardEditor);
-  assert.ok(scopedRegistry.get(BUBBLE_CLIMATE_CARD_TAG)?.prototype instanceof BubbleClimateCard);
-  assert.ok(scopedRegistry.get(BUBBLE_CLIMATE_CARD_EDITOR_TAG)?.prototype instanceof BubbleClimateCardEditor);
-  assert.equal(isBubbleClimateElementsRegistered(), true);
+  assert.equal(scopedRegistry.get('climate-flow-card'), undefined);
+  assert.equal(registerClimateFlowElements(), true);
+  assert.equal(scopedRegistry.get(CLIMATE_FLOW_CARD_TAG), ClimateFlowCard);
+  assert.equal(scopedRegistry.get(CLIMATE_FLOW_CARD_EDITOR_TAG), ClimateFlowCardEditor);
+      assert.equal(isClimateFlowElementsRegistered(), true);
   assert.equal(win.customCards.filter((card) => card?.type === 'climate-flow-card').length, 1);
-  assert.equal(nativeRegistry.get(CLIMATE_FLOW_CARD_TAG), BubbleClimateCard);
-  assert.ok(nativeRegistry.get(BUBBLE_CLIMATE_CARD_TAG)?.prototype instanceof BubbleClimateCard);
-});
+  assert.equal(nativeRegistry.get(CLIMATE_FLOW_CARD_TAG), ClimateFlowCard);
+  });
 
 test('deferred poll registers queued attempt in the live scoped registry', (t) => {
   const win = { customCards: [] };
@@ -682,7 +678,7 @@ test('deferred poll registers queued attempt in the live scoped registry', (t) =
   assert.equal(isHomeAssistantFrontendReady(), false);
   const timers = fakeTimers();
   const warnings = [];
-  const cancel = scheduleBubbleClimateReregistration({
+  const cancel = scheduleClimateFlowReregistration({
     intervalMs: 1, maxAttempts: 5,
     schedule: timers.schedule, clear: timers.clear, warn: (message) => warnings.push(String(message)),
   });
@@ -699,10 +695,9 @@ test('deferred poll registers queued attempt in the live scoped registry', (t) =
   assert.equal(typeof queuedPoll, 'function');
   timers.pending.delete(queuedId);
   queuedPoll();
-  assert.equal(scopedRegistry.get(CLIMATE_FLOW_CARD_TAG), BubbleClimateCard);
-  assert.equal(scopedRegistry.get(CLIMATE_FLOW_CARD_EDITOR_TAG), BubbleClimateCardEditor);
-  assert.ok(scopedRegistry.get(BUBBLE_CLIMATE_CARD_TAG)?.prototype instanceof BubbleClimateCard);
-  assert.equal(isBubbleClimateElementsRegistered(), true);
+  assert.equal(scopedRegistry.get(CLIMATE_FLOW_CARD_TAG), ClimateFlowCard);
+  assert.equal(scopedRegistry.get(CLIMATE_FLOW_CARD_EDITOR_TAG), ClimateFlowCardEditor);
+    assert.equal(isClimateFlowElementsRegistered(), true);
   assert.equal(timers.pending.size, 0);
   assert.equal(warnings.length, 0);
   cancel();
@@ -729,22 +724,22 @@ test('ready poll retries until the bounded limit when verification keeps failing
   assert.equal(isHomeAssistantFrontendReady(), true);
   const timers = fakeTimers();
   const warnings = [];
-  scheduleBubbleClimateReregistration({
+  scheduleClimateFlowReregistration({
     intervalMs: 1, maxAttempts: 2,
     schedule: timers.schedule, clear: timers.clear, warn: (message) => warnings.push(String(message)),
   });
   assert.equal(timers.pending.size, 1);
-  assert.equal(isBubbleClimateElementsRegistered(), false);
+  assert.equal(isClimateFlowElementsRegistered(), false);
   const first = [...timers.pending.values()][0];
   timers.pending.clear();
   first();
   assert.equal(timers.pending.size, 1);
-  assert.equal(isBubbleClimateElementsRegistered(), false);
+  assert.equal(isClimateFlowElementsRegistered(), false);
   const second = [...timers.pending.values()][0];
   timers.pending.clear();
   second();
   assert.equal(timers.pending.size, 0);
-  assert.equal(isBubbleClimateElementsRegistered(), false);
+  assert.equal(isClimateFlowElementsRegistered(), false);
   assert.equal(warnings.length, 1);
 });
 
@@ -754,7 +749,7 @@ test('define failure in poll surfaces once and stops polling without uncaught', 
   assert.equal(isHomeAssistantFrontendReady(), false);
   const timers = fakeTimers();
   const warnings = [];
-  scheduleBubbleClimateReregistration({
+  scheduleClimateFlowReregistration({
     intervalMs: 1, maxAttempts: 5,
     schedule: timers.schedule, clear: timers.clear, warn: (message) => warnings.push(String(message)),
   });
@@ -767,7 +762,7 @@ test('define failure in poll surfaces once and stops polling without uncaught', 
   const throwingRegistry = {
     get(tag) { return store.get(tag); },
     define(tag, ctor) {
-      if (tag === BUBBLE_CLIMATE_CARD_TAG) throw new TypeError('invalid constructor');
+      if (tag === CLIMATE_FLOW_CARD_TAG) throw new TypeError('invalid constructor');
       if (typeof ctor !== 'function') throw new TypeError('Custom element constructor must be a function');
       if (!store.has(tag)) store.set(tag, ctor);
     },
@@ -782,7 +777,7 @@ test('define failure in poll surfaces once and stops polling without uncaught', 
   assert.match(warnings[0], /failed to register custom elements/);
   assert.match(warnings[0], /invalid constructor/);
   assert.equal(timers.pending.size, 0);
-  assert.equal(isBubbleClimateElementsRegistered(), false);
+  assert.equal(isClimateFlowElementsRegistered(), false);
 });
 
 test('cancel clears a pending poll before it runs', (t) => {
@@ -793,7 +788,7 @@ test('cancel clears a pending poll before it runs', (t) => {
   const warnings = [];
   let ran = 0;
   const originalSchedule = timers.schedule;
-  const cancel = scheduleBubbleClimateReregistration({
+  const cancel = scheduleClimateFlowReregistration({
     intervalMs: 1, maxAttempts: 5,
     schedule: (fn, ms) => originalSchedule(() => { ran += 1; fn(); }, ms),
     clear: timers.clear,
@@ -820,7 +815,7 @@ test('HVAC card toggle only requests supported heat/off modes', () => {
 });
 
 test('card tap excludes controls and target updates optimistically with service rerender', () => {
- const source=readFileSync(new URL('./custom_components/bubble_climate_scheduler/www/bubble-climate-card.js', import.meta.url),'utf8');
+ const source=readFileSync(new URL('./custom_components/climate_flow_scheduler/www/climate-flow-card.js', import.meta.url),'utf8');
  assert.match(source,/role="group" aria-label="Tap card background to toggle heating"/);
  assert.doesNotMatch(source,/ha-card tabindex="0" role="button"/);
  assert.match(source,/path\.some\(node=>node!==card[\s\S]*?node\?\.matches\?\.\('button,input,select,textarea,a,\[role="slider"\],\[role="button"\],\[role="group"\]'\)/);
@@ -845,13 +840,13 @@ test('optimistic target model uses the service payload for single and dual targe
 });
 
 test('every card rebuild restores focus on an active +/- delta and never steals it', async (t) => {
-  const source = readFileSync(new URL('./custom_components/bubble_climate_scheduler/www/bubble-climate-card.js', import.meta.url), 'utf8');
+  const source = readFileSync(new URL('./custom_components/climate_flow_scheduler/www/climate-flow-card.js', import.meta.url), 'utf8');
 
   // Static wiring: all four rebuild paths (hass tick, optimistic render, the
   // 8s timeout and the service rollback) go through the same wrapper, so a
   // later re-render cannot drop focus that the first one already restored.
   assert.match(source, /set hass\(hass\) \{ this\._hass = hass; this\._reconcileOptimistic\(\); this\._renderPreservingDeltaFocus\(\); \}/);
-  const cardStart = source.indexOf('export class BubbleClimateCard extends');
+  const cardStart = source.indexOf('export class ClimateFlowCard extends');
   const configStart = source.indexOf('  setConfig(config) {', cardStart);
   const hassStart = source.indexOf('  set hass(hass)', configStart);
   assert.ok(configStart !== -1 && hassStart > configStart, 'card config setter exists');
@@ -1011,7 +1006,7 @@ test('errorLabel translates backend error codes with context placeholders', () =
 });
 
 test('card surfaces route backend errors through errorLabel for translation', () => {
-  const source = readFileSync(new URL('./custom_components/bubble_climate_scheduler/www/bubble-climate-card.js', import.meta.url), 'utf8');
+  const source = readFileSync(new URL('./custom_components/climate_flow_scheduler/www/climate-flow-card.js', import.meta.url), 'utf8');
   assert.ok(source.includes("p.textContent = errorLabel(t, program.last_error)"), 'schedule dialog must translate last_error');
   const routed = source.match(/errorLabel\(t, err\?\.message \|\| err\)/g);
   assert.ok(routed && routed.length >= 2, 'delete and save failures must be routed through errorLabel');

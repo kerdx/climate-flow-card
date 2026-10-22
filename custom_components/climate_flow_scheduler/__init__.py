@@ -470,24 +470,15 @@ def _validate_climate_target(state: Any, temperatures: list[Any], mode: Any = No
 
 @callback
 def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Migrate a saved config entry to the current entry version.
-
-    Version 2 keeps the same entry data and updates the display title.
-    Entries written by a newer release are rejected so an outdated
-    integration never saves over newer data.
-    """
+    """Migrate a saved config entry version without changing its title or data."""
     if entry.version > CONFIG_ENTRY_VERSION:
         _LOGGER.error(
             "Config entry for Climate Flow Scheduler was saved by a newer version; update the integration"
         )
         return False
     if entry.version != CONFIG_ENTRY_VERSION:
-        # Rename only the integration's default title; preserve any custom
-        # title chosen by the user in Home Assistant.
-        title = "Climate Flow Scheduler" if entry.title == "Bubble Climate Scheduler" else entry.title
         hass.config_entries.async_update_entry(
             entry,
-            title=title,
             version=CONFIG_ENTRY_VERSION,
         )
     return True
@@ -497,7 +488,7 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
     hass.data.setdefault(DOMAIN, {})
     www_path = Path(__file__).parent / "www"
     await hass.http.async_register_static_paths([
-        StaticPathConfig("/bubble_climate_scheduler", str(www_path), cache_headers=False)
+        StaticPathConfig("/climate_flow_scheduler", str(www_path), cache_headers=False)
     ])
     return True
 

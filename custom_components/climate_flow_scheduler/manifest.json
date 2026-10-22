@@ -1,14 +1,19 @@
 {
-  "domain": "bubble_climate_scheduler",
+  "domain": "climate_flow_scheduler",
   "name": "Climate Flow Scheduler",
-  "codeowners": ["@kerdx"],
+  "codeowners": [
+    "@kerdx"
+  ],
   "config_flow": true,
-  "dependencies": ["frontend", "http"],
+  "dependencies": [
+    "frontend",
+    "http"
+  ],
   "documentation": "https://github.com/kerdx/climate-flow-card",
   "integration_type": "service",
   "iot_class": "calculated",
   "issue_tracker": "https://github.com/kerdx/climate-flow-card/issues",
   "requirements": [],
   "single_config_entry": true,
-  "version": "0.2.3"
+  "version": "1.0.0"
 }

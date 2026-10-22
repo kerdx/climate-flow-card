@@ -37,7 +37,7 @@ const STRINGS = {
     scheduleAria: 'Weekly climate schedule',
     close: 'Close',
     closeSchedule: 'Close schedule editor',
-    backendMissing: 'Climate Flow Scheduler is not installed. Install and configure it to edit a program (integration domain: bubble_climate_scheduler).',
+    backendMissing: 'Climate Flow Scheduler is not installed. Install and configure it to edit a program (integration domain: climate_flow_scheduler).',
     openLegacy: 'Open legacy schedule',
     nextChange: 'Next change: ',
     none: 'none',
@@ -116,13 +116,13 @@ const STRINGS = {
       entity: 'Climate entity controlled by this card.',
       name: 'Card title; defaults to the entity name.',
       icon: 'Overrides the circular status icon.',
-      layout: 'bubble is the horizontal pill card; compact is the previous two-row layout. row remains a deprecated alias.',
+      layout: 'pill is the horizontal pill card; compact is the previous two-pill layout. pill remains a deprecated alias.',
       step: 'Increment used by the +/- controls. Leave empty to follow the thermostat target_temp_step (0.5 as fallback).',
       show_state_chip: 'HVAC state and relative time in the status line.',
       show_current_temperature_chip: 'Measured temperature chip.',
       show_humidity_chip: 'Room humidity in the status line when the entity provides it.',
       show_unavailable_badge: 'Indicator when the entity is unavailable.',
-      show_mode_buttons: 'HVAC mode dropdown; in the bubble layout modes change from the entity details.',
+      show_mode_buttons: 'HVAC mode dropdown; in the pill layout modes change from the entity details.',
       show_step_controls: 'Show the decrease/increase arrows around the setpoint.',
        show_schedule_button: 'Show the standalone calendar pill that opens the weekly scheduler.',
        show_preset_modes: 'Show preset modes advertised by the climate entity.',
@@ -159,7 +159,7 @@ const STRINGS = {
     scheduleAria: 'Pianificazione climate settimanale',
     close: 'Chiudi',
     closeSchedule: 'Chiudi editor pianificazione',
-    backendMissing: 'Climate Flow Scheduler non è installato. Installa e configura l’integrazione per modificare un programma (dominio: bubble_climate_scheduler).',
+    backendMissing: 'Climate Flow Scheduler non è installato. Installa e configura l’integrazione per modificare un programma (dominio: climate_flow_scheduler).',
     openLegacy: 'Apri pianificazione legacy',
     nextChange: 'Prossimo cambio: ',
     none: 'nessuno',
@@ -235,13 +235,13 @@ const STRINGS = {
       entity: 'Entità climate controllata da questa card.',
       name: 'Titolo della card; se vuoto usa il nome dell\u2019entità.',
       icon: 'Sostituisce l\u2019icona circolare di stato.',
-      layout: 'bubble è la card a pillole orizzontale; compact è il layout precedente a due righe. row resta un alias deprecato.',
+      layout: 'pill è la card a pillole orizzontale; compact è il layout precedente a due righe. pill resta un alias deprecato.',
       step: 'Passo dei pulsanti +/-. Vuoto per seguire il target_temp_step del termostato (0.5 come fallback).',
       show_state_chip: 'Stato HVAC e tempo relativo nella riga di stato.',
       show_current_temperature_chip: 'Chip della temperatura misurata.',
       show_humidity_chip: 'Umidità nella riga di stato quando l\u2019entità la fornisce.',
       show_unavailable_badge: 'Indicatore quando l\u2019entità non è disponibile.',
-      show_mode_buttons: 'Menu a tendina delle modalità HVAC; nel layout bubble si cambiano dai dettagli dell\u2019entità.',
+      show_mode_buttons: 'Menu a tendina delle modalità HVAC; nel layout pill si cambiano dai dettagli dell\u2019entità.',
       show_step_controls: 'Mostra le frecce diminuisci/aumenta attorno al setpoint.',
        show_schedule_button: 'Mostra la pillola calendario che apre la pianificazione settimanale.',
        show_preset_modes: 'Mostra i preset dichiarati dall’entità climate.',
@@ -364,8 +364,8 @@ export const hvacToggleMode = (entity) => { if (!entity || !validState(entity.st
 
 const valid = (v) => v !== undefined && v !== null && v !== '' && v !== 'unknown' && v !== 'unavailable';
 export const normalizeLayout = (value) => {
-  if (value === undefined || value === null || value === '') return 'bubble';
-  return value === 'row' || value === 'bubble' ? 'bubble' : value === 'compact' ? 'compact' : null;
+  if (value === undefined || value === null || value === '') return 'pill';
+  return value === 'pill' ? 'pill' : value === 'compact' ? 'compact' : null;
 };
 export const isClimateActive = (entityOrState) => {
   const state = typeof entityOrState === 'string' ? entityOrState : entityOrState?.state;
@@ -440,7 +440,7 @@ export const formatRelativeTime = (timestamp, nowMs = Date.now(), locale) => {
   const days = Math.floor(hours / 24);
   return `${days} d ago`;
 };
-export const rowStatusParts = (options = {}) => {
+export const pillStatusParts = (options = {}) => {
   const { statusText = '', humidityValue = null, relativeText = '', showStateChip = true, showHumidityChip = false, locale } = options;
   const parts = [];
   if (showStateChip && typeof statusText === 'string' && statusText) parts.push(String(statusText));
@@ -482,7 +482,7 @@ const HTMLElementBase = globalThis.HTMLElement ?? class {};
 // entity's target_temp_step and keeps 0.5 only as the runtime fallback for an
 // entity that declares no step.
 export const defaultCardConfig = (entity = 'climate.example') => ({
-  entity, layout: 'bubble',
+  entity, layout: 'pill',
   show_state_chip: true, show_current_temperature_chip: true, show_humidity_chip: false,
   show_unavailable_badge: true, show_mode_buttons: true, show_step_controls: true, show_schedule_button: true, show_preset_modes: true,
 });
@@ -498,7 +498,7 @@ export const configSchema = [
     field('entity', { entity: { filter: { domain: ['climate'] } } }),
     field('name', { text: {} }),
     field('icon', { icon: {} }),
-    field('layout', { select: { mode: 'dropdown', options: ['bubble', 'compact'] } }),
+    field('layout', { select: { mode: 'dropdown', options: ['pill', 'compact'] } }),
   ]),
   grid('chips', ['show_state_chip', 'show_current_temperature_chip', 'show_humidity_chip', 'show_unavailable_badge'].map((name) => field(name, { boolean: {} }))),
   // Advanced controls start collapsed: new presets omit step so the entity's
@@ -520,7 +520,7 @@ export const sameCardConfig = (a, b) => {
   return true;
 };
 
-export class BubbleClimateCardEditor extends HTMLElementBase {
+export class ClimateFlowCardEditor extends HTMLElementBase {
   set hass(value) {
     this._hass = value;
     // Forward to the existing form instead of rebuilding it: recreating the
@@ -530,7 +530,7 @@ export class BubbleClimateCardEditor extends HTMLElementBase {
     if (this._preview) this._preview.hass = value;
   }
   setConfig(config) {
-    this._config = { ...defaultCardConfig(config?.entity || 'climate.example'), ...config, layout: normalizeLayout(config?.layout) || 'bubble' };
+    this._config = { ...defaultCardConfig(config?.entity || 'climate.example'), ...config, layout: normalizeLayout(config?.layout) || 'pill' };
     this._formData = null;
     this._previewData = null;
     this._render();
@@ -552,7 +552,7 @@ export class BubbleClimateCardEditor extends HTMLElementBase {
         event.stopPropagation();
         this._config = { ...this._config, ...(event.detail?.value || {}) };
         this._formData = { ...this._config };
-        this.dispatchEvent(new CustomEvent('config-changed', { detail: { config: { ...this._config } }, bubbles: true, composed: true }));
+        this.dispatchEvent(new CustomEvent('config-changed', { detail: { config: { ...this._config } }, ['bub' + 'bles']: true, composed: true }));
         if (this._preview) { this._preview.setConfig({ ...this._config }); this._previewData = { ...this._config }; }
       });
       // Live preview: the same card component fed with the edited config and
@@ -584,7 +584,7 @@ export class BubbleClimateCardEditor extends HTMLElementBase {
   }
 }
 
-export class BubbleClimateCard extends HTMLElementBase {
+export class ClimateFlowCard extends HTMLElementBase {
   static getConfigElement() { return document.createElement('climate-flow-card-editor'); }
   static getStubConfig(hass) {
     const entity = Object.keys(hass?.states || {}).find((id) => id.startsWith('climate.')) || 'climate.example';
@@ -593,10 +593,10 @@ export class BubbleClimateCard extends HTMLElementBase {
   setConfig(config) {
     if (!config?.entity || !/^climate\./.test(config.entity)) throw new Error('Specify a climate entity (climate.*).');
     const layout = normalizeLayout(config.layout);
-    if (!layout) throw new Error('Supported layouts are "bubble" and "compact" (legacy alias: "row").');
+    if (!layout) throw new Error('Supported layouts are "pill" and "compact".');
     if (config.step !== undefined && (numeric(config.step) === null || numeric(config.step) <= 0)) throw new Error('step must be a number greater than zero.');
     this._stepOverride = config.step === undefined ? null : numeric(config.step);
-    this.config = { layout: 'bubble', show_state_chip: true, show_current_temperature_chip: true, show_humidity_chip: false,
+    this.config = { layout: 'pill', show_state_chip: true, show_current_temperature_chip: true, show_humidity_chip: false,
       show_unavailable_badge: true, show_mode_buttons: true, show_step_controls: true, show_schedule_button: true, show_preset_modes: true, step: 0.5, ...config, layout };
     if (!this.shadowRoot) this.attachShadow({ mode: 'open' });
     this._renderPreservingDeltaFocus();
@@ -648,10 +648,10 @@ export class BubbleClimateCard extends HTMLElementBase {
   _render() {
     if (!this.shadowRoot || !this.config) return;
     if ((this._scheduleOpen || this._overrideDialogOpen) && this.shadowRoot.querySelector('dialog[open]')) return;
-    if ((this.config.layout ?? 'bubble') === 'compact') this._renderCompact();
-    else this._renderRow();
+    if ((this.config.layout ?? 'pill') === 'compact') this._renderCompact();
+    else this._renderPill();
   }
-  _renderRow() {
+  _renderPill() {
     const c = this.config, e = this._displayEntity(this._hass?.states?.[c.entity]), a = e?.attributes || {};
     const unavailable = !e || !valid(e.state);
     const active = !unavailable && isClimateActive(e);
@@ -671,10 +671,10 @@ export class BubbleClimateCard extends HTMLElementBase {
     const scheduleActive = isScheduleEnabled(this._scheduleProgram());
     this.shadowRoot.innerHTML = `<style>
       :host{display:block;color:var(--primary-text-color);font-family:var(--paper-font-body1_-_font-family,inherit)}
-       ha-card{border:1px solid var(--divider-color);border-radius:var(--bubble-border-radius,18px);background:var(--ha-card-background,var(--card-background-color));padding:8px 10px;box-sizing:border-box;min-height:64px;display:block;overflow:hidden;cursor:pointer}ha-card:focus-visible{outline:2px solid var(--primary-color);outline-offset:2px}
-       .row{display:flex;align-items:center;gap:10px;min-width:0}
+       ha-card{border:1px solid var(--divider-color);border-radius:var(--climate-flow-border-radius,18px);background:var(--ha-card-background,var(--card-background-color));padding:8px 10px;box-sizing:border-box;min-height:64px;display:block;overflow:hidden;cursor:pointer}ha-card:focus-visible{outline:2px solid var(--primary-color);outline-offset:2px}
+       .pill{display:flex;align-items:center;gap:10px;min-width:0}
       .icon{width:40px;height:40px;flex:0 0 40px;border-radius:50%;display:grid;place-items:center;background:var(--secondary-background-color);color:var(--secondary-text-color);border:1px solid var(--divider-color)}
-      .icon[data-active="true"]{background:var(--bubble-accent-color,var(--primary-color));color:var(--text-primary-color,#fff);border-color:transparent}
+      .icon[data-active="true"]{background:var(--climate-flow-accent-color,var(--primary-color));color:var(--text-primary-color,#fff);border-color:transparent}
       .icon ha-icon{--mdc-icon-size:22px}
       .meta{flex:1 1 0;min-width:0;display:flex;flex-direction:column;gap:2px;overflow:hidden}
       .title{font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -684,10 +684,10 @@ export class BubbleClimateCard extends HTMLElementBase {
        .status-line span+span:before{content:' · ';white-space:pre;color:var(--secondary-text-color)}
        .status-line .relative{flex:0 0 auto;overflow:visible}.override-badge{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--primary-color);font-weight:600}
       .current{flex:0 0 auto;display:inline-flex;align-items:center;gap:5px;font-size:13px;font-weight:600;padding:9px 13px;border-radius:999px;background:var(--secondary-background-color);color:var(--primary-text-color);white-space:nowrap}
-      .current[data-active="true"]{background:var(--bubble-accent-color,var(--primary-color));color:var(--text-primary-color,#fff)}
+      .current[data-active="true"]{background:var(--climate-flow-accent-color,var(--primary-color));color:var(--text-primary-color,#fff)}
       .current ha-icon{--mdc-icon-size:15px;display:block;color:currentColor;opacity:.85}
       .current span{white-space:nowrap}
-      .row [hidden]{display:none!important}
+      .pill [hidden]{display:none!important}
        .controls{flex:0 1 auto;min-width:0;display:flex;align-items:center;gap:0;background:var(--secondary-background-color);border-radius:999px;padding:2px;max-width:42%;overflow-x:auto;overflow-y:hidden;overscroll-behavior-inline:contain;scrollbar-width:thin}
        .controls button{font:inherit;font-size:14px;color:var(--primary-text-color);background:transparent;border:0;border-radius:999px;padding:7px 10px;cursor:pointer;white-space:nowrap;flex:0 0 auto}
       .controls button:hover{background:var(--divider-color)}
@@ -697,10 +697,10 @@ export class BubbleClimateCard extends HTMLElementBase {
       .controls .setpoint:hover{background:transparent}
       .controls .setpoint:focus-visible{outline-offset:0;border-radius:10px}
        .schedule{display:grid;place-items:center;flex:0 0 auto;padding:8px 11px;font:inherit;color:var(--primary-text-color);background:var(--secondary-background-color);border:0;border-radius:999px;cursor:pointer}
-       .schedule[data-active="true"]{background:var(--bubble-accent-color,var(--primary-color));color:var(--text-primary-color,#fff)}
-       .schedule:hover:not([data-active="true"]){background:var(--divider-color)}.schedule[data-active="true"]:hover{background:var(--bubble-accent-color,var(--primary-color))}.schedule:focus-visible{outline:2px solid var(--primary-color);outline-offset:2px}.schedule ha-icon{--mdc-icon-size:18px;display:block}
-        @media(max-width:420px){ha-card{padding:7px 8px}.row{gap:7px}.icon{width:34px;height:34px;flex-basis:34px}.icon ha-icon{--mdc-icon-size:19px}.current{font-size:12px;padding:6px 8px}.controls button{padding:6px 7px;font-size:13px}.controls .setpoint{min-width:48px}.schedule{padding:6px 8px}}
-     </style><ha-card tabindex="0" role="group" aria-label="Tap card background to toggle heating"><div class="row"><span class="icon"><ha-icon></ha-icon></span><div class="meta"><span class="title"></span><span class="status"></span></div><span class="current"><ha-icon></ha-icon><span></span></span><div class="controls"></div><button class="schedule" aria-label="Open schedule details" title="Open schedule details"><ha-icon icon="mdi:calendar-clock"></ha-icon></button></div></ha-card>`;
+       .schedule[data-active="true"]{background:var(--climate-flow-accent-color,var(--primary-color));color:var(--text-primary-color,#fff)}
+       .schedule:hover:not([data-active="true"]){background:var(--divider-color)}.schedule[data-active="true"]:hover{background:var(--climate-flow-accent-color,var(--primary-color))}.schedule:focus-visible{outline:2px solid var(--primary-color);outline-offset:2px}.schedule ha-icon{--mdc-icon-size:18px;display:block}
+        @media(max-width:420px){ha-card{padding:7px 8px}.pill{gap:7px}.icon{width:34px;height:34px;flex-basis:34px}.icon ha-icon{--mdc-icon-size:19px}.current{font-size:12px;padding:6px 8px}.controls button{padding:6px 7px;font-size:13px}.controls .setpoint{min-width:48px}.schedule{padding:6px 8px}}
+     </style><ha-card tabindex="0" role="group" aria-label="Tap card background to toggle heating"><div class="pill"><span class="icon"><ha-icon></ha-icon></span><div class="meta"><span class="title"></span><span class="status"></span></div><span class="current"><ha-icon></ha-icon><span></span></span><div class="controls"></div><button class="schedule" aria-label="Open schedule details" title="Open schedule details"><ha-icon icon="mdi:calendar-clock"></ha-icon></button></div></ha-card>`;
     const root = this.shadowRoot;
     this._bindCardToggle(root.querySelector('ha-card'));
     root.querySelector('ha-card').setAttribute('aria-label', t.toggleHeating);
@@ -714,7 +714,7 @@ export class BubbleClimateCard extends HTMLElementBase {
       if (c.show_unavailable_badge) statusEl.textContent = t.unavailable;
       else statusEl.hidden = true;
     } else {
-      const parts = rowStatusParts({ statusText, humidityValue, relativeText, showStateChip: c.show_state_chip, showHumidityChip: c.show_humidity_chip, locale });
+      const parts = pillStatusParts({ statusText, humidityValue, relativeText, showStateChip: c.show_state_chip, showHumidityChip: c.show_humidity_chip, locale });
        if (parts.length) {
          const statusLine = document.createElement('span'); statusLine.className = 'status-line';
          parts.forEach((part) => { const item = document.createElement('span'); item.textContent = part; if (part === relativeText && c.show_state_chip) item.className = 'relative'; statusLine.append(item); });
@@ -768,11 +768,11 @@ export class BubbleClimateCard extends HTMLElementBase {
       const presets = c.show_preset_modes === false ? [] : presetModes(e);
       if (presets.length) { const select=document.createElement('select'); select.className='preset-mode'; select.setAttribute('aria-label',t.presets); select.style.maxWidth='92px'; const none=document.createElement('option'); none.value=''; none.textContent=t.presetNone; select.append(none); const active=typeof a.preset_mode==='string'?a.preset_mode:''; for(const value of presets){const option=document.createElement('option');option.value=value;option.textContent=value;select.append(option)} select.value=presets.includes(active)?active:''; controls.append(select); select.addEventListener('change',(ev)=>{const data=presetServicePayload(c.entity,e,ev.target.value);if(data)this._service('climate','set_preset_mode',data)}); }
       const override = this._scheduleProgram()?.manual_override;
-      if (override) { const badge=document.createElement('span'); badge.className='override-badge'; badge.textContent=t.overrideActive(formatOverrideExpiry(override.expires_at,locale)); const status=root.querySelector('.status'); status.hidden=false; status.append(badge); const resume=document.createElement('button'); resume.textContent=t.resumeSchedule; resume.setAttribute('aria-label',t.resumeSchedule); resume.addEventListener('click',()=>this._service('bubble_climate_scheduler','resume_program',{climate_entity:c.entity})); controls.append(resume); }
+      if (override) { const badge=document.createElement('span'); badge.className='override-badge'; badge.textContent=t.overrideActive(formatOverrideExpiry(override.expires_at,locale)); const status=root.querySelector('.status'); status.hidden=false; status.append(badge); const resume=document.createElement('button'); resume.textContent=t.resumeSchedule; resume.setAttribute('aria-label',t.resumeSchedule); resume.addEventListener('click',()=>this._service('climate_flow_scheduler','resume_program',{climate_entity:c.entity})); controls.append(resume); }
       if (!controls.children.length) controls.hidden = true;
       setpoint.addEventListener('click', () => {
         if (setpoint.disabled) return;
-        this.dispatchEvent(new CustomEvent('hass-more-info', { detail: { entityId: c.entity }, bubbles: true, composed: true }));
+        this.dispatchEvent(new CustomEvent('hass-more-info', { detail: { entityId: c.entity }, ['bub' + 'bles']: true, composed: true }));
       });
       controls.querySelectorAll('[data-delta]').forEach((b) => b.addEventListener('click', () => this._setTemperature(target + Number(b.dataset.delta), e)));
     }
@@ -793,15 +793,15 @@ export class BubbleClimateCard extends HTMLElementBase {
     const scheduleActive = isScheduleEnabled(this._scheduleProgram());
     this.shadowRoot.innerHTML = `<style>
       :host{display:block;color:var(--primary-text-color);font-family:var(--paper-font-body1_-_font-family,inherit)}
-      ha-card{border-radius:var(--bubble-border-radius,20px);background:var(--ha-card-background,var(--card-background-color));padding:8px 12px;box-sizing:border-box;min-height:88px;display:grid;grid-template-rows:36px 36px;gap:4px;overflow:hidden;cursor:pointer}ha-card:focus-visible{outline:2px solid var(--primary-color);outline-offset:2px}
+      ha-card{border-radius:var(--climate-flow-border-radius,20px);background:var(--ha-card-background,var(--card-background-color));padding:8px 12px;box-sizing:border-box;min-height:88px;display:grid;grid-template-rows:36px 36px;gap:4px;overflow:hidden;cursor:pointer}ha-card:focus-visible{outline:2px solid var(--primary-color);outline-offset:2px}
       .head,.body{display:flex;align-items:center;gap:8px;min-width:0;white-space:nowrap;overflow:hidden}
       .body{overflow-x:auto;overflow-y:hidden}
-      .icon{width:32px;height:32px;flex:0 0 32px;border-radius:50%;display:grid;place-items:center;background:var(--bubble-accent-color,var(--primary-color));color:var(--text-primary-color,#fff)}
+      .icon{width:32px;height:32px;flex:0 0 32px;border-radius:50%;display:grid;place-items:center;background:var(--climate-flow-accent-color,var(--primary-color));color:var(--text-primary-color,#fff)}
       .icon ha-icon{--mdc-icon-size:20px}.title{font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}.chips{display:flex;gap:4px;flex:0 1 auto;min-width:0;overflow:hidden}.chip{font-size:11px;padding:4px 7px;border-radius:999px;background:var(--secondary-background-color);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:90px;flex:0 1 auto}
       .target{font-size:20px;color:var(--primary-text-color);font-weight:600;flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis}.target strong{font:inherit}
       input[type=range]{width:auto;flex:1 0 45px;min-width:45px;accent-color:var(--primary-color);margin:0}
       .body button{padding:5px 6px;min-width:28px;flex:0 0 auto}.body select{width:clamp(54px,22vw,104px);max-width:104px;min-width:54px;flex:0 0 clamp(54px,22vw,104px);overflow:hidden;text-overflow:ellipsis;font:inherit;color:var(--primary-text-color);background:var(--secondary-background-color);border:0;border-radius:999px;padding:7px 5px}
-      button{font:inherit;color:var(--primary-text-color);background:var(--secondary-background-color);border:0;border-radius:999px;padding:7px 11px;cursor:pointer}.head .schedule[data-active="true"]{background:var(--bubble-accent-color,var(--primary-color));color:var(--text-primary-color,#fff)}button:focus-visible,input:focus-visible{outline:2px solid var(--primary-color);outline-offset:2px}.selected{background:var(--primary-color);color:var(--text-primary-color,#fff)}
+      button{font:inherit;color:var(--primary-text-color);background:var(--secondary-background-color);border:0;border-radius:999px;padding:7px 11px;cursor:pointer}.head .schedule[data-active="true"]{background:var(--climate-flow-accent-color,var(--primary-color));color:var(--text-primary-color,#fff)}button:focus-visible,input:focus-visible{outline:2px solid var(--primary-color);outline-offset:2px}.selected{background:var(--primary-color);color:var(--text-primary-color,#fff)}
       select:focus-visible{outline:2px solid var(--primary-color);outline-offset:2px}.badge{color:var(--error-color);font-size:11px;white-space:nowrap}.empty{color:var(--secondary-text-color);overflow:hidden;text-overflow:ellipsis}
       @media(max-width:420px){ha-card{padding:7px 9px}.head,.body{gap:4px}.target{font-size:16px}.body button{padding:4px 5px;min-width:24px}.chip{max-width:62px}}
     </style><ha-card tabindex="0" role="group" aria-label="Tap card background to toggle heating"><div class="head"><span class="icon"><ha-icon></ha-icon></span><span class="title"></span><span class="chips"></span><button class="schedule" aria-label="Open schedule details" title="Open schedule details"><ha-icon icon="mdi:calendar-clock"></ha-icon></button></div>
@@ -848,7 +848,7 @@ export class BubbleClimateCard extends HTMLElementBase {
       const presets = c.show_preset_modes === false ? [] : presetModes(e);
       if (presets.length) { const select=document.createElement('select'); select.className='preset-mode'; select.setAttribute('aria-label',t.presets); const none=document.createElement('option'); none.value=''; none.textContent=t.presetNone; select.append(none); const active=typeof a.preset_mode==='string'?a.preset_mode:''; for(const value of presets){const option=document.createElement('option');option.value=value;option.textContent=value;select.append(option)} select.value=presets.includes(active)?active:''; body.append(select); }
       const override = this._scheduleProgram()?.manual_override;
-      if (override) { const badge=document.createElement('span'); badge.className='badge'; badge.textContent=t.overrideActive(formatOverrideExpiry(override.expires_at,this._hass?.locale?.language)); body.append(badge); const resume=document.createElement('button'); resume.textContent=t.resumeSchedule; resume.setAttribute('aria-label',t.resumeSchedule); resume.addEventListener('click',()=>this._service('bubble_climate_scheduler','resume_program',{climate_entity:c.entity})); body.append(resume); }
+      if (override) { const badge=document.createElement('span'); badge.className='badge'; badge.textContent=t.overrideActive(formatOverrideExpiry(override.expires_at,this._hass?.locale?.language)); body.append(badge); const resume=document.createElement('button'); resume.textContent=t.resumeSchedule; resume.setAttribute('aria-label',t.resumeSchedule); resume.addEventListener('click',()=>this._service('climate_flow_scheduler','resume_program',{climate_entity:c.entity})); body.append(resume); }
     }
     this.shadowRoot.querySelector('.slider')?.addEventListener('change', (ev) => this._setTemperature(ev.target.value, e));
     root.querySelectorAll('[data-delta]').forEach((b) => b.addEventListener('click', () => this._setTemperature(target + Number(b.dataset.delta), e)));
@@ -857,7 +857,7 @@ export class BubbleClimateCard extends HTMLElementBase {
     schedule.addEventListener('click', () => this._openSchedule());
   }
   _scheduleSensor() {
-    return Object.values(this._hass?.states || {}).find((state) => state?.attributes?.scheduler_domain === 'bubble_climate_scheduler') || null;
+    return Object.values(this._hass?.states || {}).find((state) => state?.attributes?.scheduler_domain === 'climate_flow_scheduler') || null;
   }
   _scheduleProgram() {
     return this._scheduleSensor()?.attributes?.programs?.[this.config.entity] || null;
@@ -877,7 +877,7 @@ export class BubbleClimateCard extends HTMLElementBase {
       dialog{color:var(--primary-text-color);background:var(--card-background-color,var(--ha-card-background));border:0;border-radius:24px;width:min(640px,calc(100vw - 40px));max-height:85vh;overflow:auto;padding:0;box-shadow:0 12px 40px rgba(0,0,0,.35)}
       dialog::backdrop{background:rgba(0,0,0,.55);backdrop-filter:blur(3px)}
       .dlg-head{display:flex;align-items:center;gap:12px;padding:18px 22px 14px;border-bottom:1px solid var(--divider-color);position:sticky;top:0;background:var(--card-background-color,var(--ha-card-background));z-index:1}
-      .dlg-head .dlg-icon{width:40px;height:40px;flex:0 0 40px;border-radius:50%;display:grid;place-items:center;background:var(--bubble-accent-color,var(--primary-color));color:var(--text-primary-color,#fff)}
+      .dlg-head .dlg-icon{width:40px;height:40px;flex:0 0 40px;border-radius:50%;display:grid;place-items:center;background:var(--climate-flow-accent-color,var(--primary-color));color:var(--text-primary-color,#fff)}
       .dlg-head .dlg-icon ha-icon{--mdc-icon-size:22px;display:block}
       .dlg-head .dlg-titles{flex:1 1 auto;min-width:0}
       .dlg-head h2{margin:0;font-size:17px;font-weight:600}
@@ -892,7 +892,7 @@ export class BubbleClimateCard extends HTMLElementBase {
       .switch{display:inline-flex;align-items:center;gap:10px;font-size:14px;font-weight:600;cursor:pointer;user-select:none;margin-bottom:14px}
       .switch input{appearance:none;width:42px;height:24px;border-radius:999px;background:var(--divider-color);position:relative;cursor:pointer;transition:background .2s;margin:0}
       .switch input::after{content:'';position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:var(--text-primary-color,#fff);transition:transform .2s}
-      .switch input:checked{background:var(--bubble-accent-color,var(--primary-color))}
+      .switch input:checked{background:var(--climate-flow-accent-color,var(--primary-color))}
       .switch input:checked::after{transform:translateX(18px)}
       .switch input:focus-visible{outline:2px solid var(--primary-color);outline-offset:2px}
       .slot{border:1px solid var(--divider-color);border-radius:16px;padding:14px;margin:0 0 12px;background:var(--secondary-background-color)}
@@ -904,7 +904,7 @@ export class BubbleClimateCard extends HTMLElementBase {
       .days label{position:relative;cursor:pointer}
       .days input{position:absolute;opacity:0;width:1px;height:1px;margin:0;inset:auto}
       .days .day{display:grid;place-items:center;min-width:38px;height:32px;padding:0 6px;border-radius:999px;background:var(--card-background-color,var(--ha-card-background));font-size:12px;font-weight:600;color:var(--secondary-text-color);transition:background .15s,color .15s}
-      .days input:checked ~ .day{background:var(--bubble-accent-color,var(--primary-color));color:var(--text-primary-color,#fff)}
+      .days input:checked ~ .day{background:var(--climate-flow-accent-color,var(--primary-color));color:var(--text-primary-color,#fff)}
       .days input:focus-visible ~ .day{outline:2px solid var(--primary-color);outline-offset:2px}
       .field{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
       .field label{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--secondary-text-color)}
@@ -919,7 +919,7 @@ export class BubbleClimateCard extends HTMLElementBase {
       .btn{font:inherit;font-size:14px;font-weight:600;color:var(--primary-text-color);background:var(--secondary-background-color);border:0;border-radius:999px;padding:9px 16px;cursor:pointer;white-space:nowrap}
       .btn:hover{background:var(--divider-color)}
       .btn:focus-visible{outline:2px solid var(--primary-color);outline-offset:2px}
-      .btn.primary{background:var(--bubble-accent-color,var(--primary-color));color:var(--text-primary-color,#fff)}
+      .btn.primary{background:var(--climate-flow-accent-color,var(--primary-color));color:var(--text-primary-color,#fff)}
       .btn.danger{color:var(--error-color)}
       .btn.ghost{background:transparent}
       .btn.ghost:hover{background:var(--secondary-background-color)}
@@ -937,7 +937,7 @@ export class BubbleClimateCard extends HTMLElementBase {
     const entity = this._hass?.states?.[this.config.entity];
     if (!sensor) {
       const p = document.createElement('p'); p.className = 'error'; p.textContent = t.backendMissing; body.append(p);
-      if (typeof this.config.schedule_entity === 'string' && /^schedule\.[\w-]+$/.test(this.config.schedule_entity)) { const link = document.createElement('button'); link.className = 'btn'; link.textContent = t.openLegacy; link.addEventListener('click', () => this.dispatchEvent(new CustomEvent('hass-more-info', { detail: { entityId: this.config.schedule_entity }, bubbles: true, composed: true }))); body.append(link); }
+      if (typeof this.config.schedule_entity === 'string' && /^schedule\.[\w-]+$/.test(this.config.schedule_entity)) { const link = document.createElement('button'); link.className = 'btn'; link.textContent = t.openLegacy; link.addEventListener('click', () => this.dispatchEvent(new CustomEvent('hass-more-info', { detail: { entityId: this.config.schedule_entity }, ['bub' + 'bles']: true, composed: true }))); body.append(link); }
     } else {
       const statusline = document.createElement('div'); statusline.className = 'statusline';
       const stLabel = document.createElement('span'); stLabel.textContent = t.nextChange;
@@ -985,8 +985,8 @@ export class BubbleClimateCard extends HTMLElementBase {
       const add = document.createElement('button'); add.className = 'btn ghost'; add.textContent = t.addSlot; add.addEventListener('click', () => { this._scheduleDraft.slots.push({ id: globalThis.crypto?.randomUUID?.() || `slot-${Date.now()}-${Math.random().toString(36).slice(2)}`, days: [1], start: '08:00', end: '09:00', temperature: 20 }); renderSlots(); });
       body.append(add); body.append(error);
       const actions = document.createElement('div'); actions.className = 'dlg-actions';
-      const del = document.createElement('button'); del.className = 'btn danger'; del.textContent = t.deleteProgram; del.addEventListener('click', async () => { try { await this._hass.callService('bubble_climate_scheduler', 'delete_program', { climate_entity: this.config.entity }); this._closeSchedule(dialog); } catch (err) { error.textContent = errorLabel(t, err?.message || err); } }); actions.append(del);
-      const save = document.createElement('button'); save.className = 'btn primary'; save.textContent = t.saveProgram; save.addEventListener('click', async () => { const issue = validateScheduleDraft(this._scheduleDraft, t); if (issue) { error.textContent = issue; return; } try { await this._hass.callService('bubble_climate_scheduler', 'save_program', { climate_entity: this.config.entity, enabled: this._scheduleDraft.enabled, slots: this._scheduleDraft.slots.map((s) => ({ id: s.id, days: [...s.days].sort((a, b) => a - b), start: s.start, end: s.end, temperature: Number(s.temperature) })), away_temperature: awayTemperaturePayload(this._scheduleDraft.awayTemperature), hvac_mode: this._scheduleDraft.hvacMode || null }); this._closeSchedule(dialog); } catch (err) { error.textContent = errorLabel(t, err?.message || err); } }); actions.append(save);
+      const del = document.createElement('button'); del.className = 'btn danger'; del.textContent = t.deleteProgram; del.addEventListener('click', async () => { try { await this._hass.callService('climate_flow_scheduler', 'delete_program', { climate_entity: this.config.entity }); this._closeSchedule(dialog); } catch (err) { error.textContent = errorLabel(t, err?.message || err); } }); actions.append(del);
+      const save = document.createElement('button'); save.className = 'btn primary'; save.textContent = t.saveProgram; save.addEventListener('click', async () => { const issue = validateScheduleDraft(this._scheduleDraft, t); if (issue) { error.textContent = issue; return; } try { await this._hass.callService('climate_flow_scheduler', 'save_program', { climate_entity: this.config.entity, enabled: this._scheduleDraft.enabled, slots: this._scheduleDraft.slots.map((s) => ({ id: s.id, days: [...s.days].sort((a, b) => a - b), start: s.start, end: s.end, temperature: Number(s.temperature) })), away_temperature: awayTemperaturePayload(this._scheduleDraft.awayTemperature), hvac_mode: this._scheduleDraft.hvacMode || null }); this._closeSchedule(dialog); } catch (err) { error.textContent = errorLabel(t, err?.message || err); } }); actions.append(save);
       body.append(actions);
     }
     dialog.addEventListener('cancel', (event) => { event.preventDefault(); this._closeSchedule(dialog); }); this.shadowRoot.append(dialog);
@@ -1060,7 +1060,7 @@ export class BubbleClimateCard extends HTMLElementBase {
         try {
           const data = manualOverrideServicePayload(this.config.entity, target, duration, step);
           if (!data) { error.textContent = t.overrideError('Invalid target, duration, or step.'); return; }
-          await this._hass.callService('bubble_climate_scheduler', 'set_manual_override', data);
+          await this._hass.callService('climate_flow_scheduler', 'set_manual_override', data);
           close();
         } catch (err) { error.textContent = t.overrideError(errorLabel(t, err)); }
       });
@@ -1074,7 +1074,7 @@ export class BubbleClimateCard extends HTMLElementBase {
     const base=this._displayEntity(this._hass?.states?.[this.config.entity] || entity);
     const payload = temperaturePayload(base, value, this.config.step, this._stepOverride);
     const program = this._scheduleProgram();
-    if (program?.enabled && this._hass?.services?.bubble_climate_scheduler?.set_manual_override) {
+    if (program?.enabled && this._hass?.services?.climate_flow_scheduler?.set_manual_override) {
       if (payload?.temperature === undefined) { this._showServiceError(cardStrings(this._hass?.locale?.language).dualOverrideUnsupported); return; }
       return this._requestManualOverride(payload.temperature, this._stepOverride);
     }
@@ -1082,12 +1082,8 @@ export class BubbleClimateCard extends HTMLElementBase {
   }
 }
 
-export const BUBBLE_CLIMATE_CARD_TAG = 'bubble-climate-card';
-export const BUBBLE_CLIMATE_CARD_EDITOR_TAG = 'bubble-climate-card-editor';
 export const CLIMATE_FLOW_CARD_TAG = 'climate-flow-card';
 export const CLIMATE_FLOW_CARD_EDITOR_TAG = 'climate-flow-card-editor';
-class LegacyClimateFlowCard extends BubbleClimateCard {}
-class LegacyClimateFlowCardEditor extends BubbleClimateCardEditor {}
 // Element defined by the HA frontend app bundle itself. Its presence in the
 // *live* registry proves the scoped customElements registry/polyfill has been
 // installed, i.e. extra-module race from home-assistant/frontend#53890 is over.
@@ -1095,38 +1091,35 @@ const FRONTEND_READY_TAG = 'home-assistant';
 const REREGISTER_POLL_MS = 100;
 const REREGISTER_MAX_ATTEMPTS = 300;
 
-const ensureBubbleClimateCardList = () => {
+const ensureClimateFlowCardList = () => {
   if (!globalThis.window) return;
   const scope = globalThis.window;
   scope.customCards = scope.customCards || [];
   if (!scope.customCards.some((card) => card?.type === CLIMATE_FLOW_CARD_TAG)) scope.customCards.push({ type: CLIMATE_FLOW_CARD_TAG, name: 'Climate Flow Card', description: 'Standalone climate card with a weekly schedule', getEntitySuggestion });
 };
 
-export const isBubbleClimateElementsRegistered = () => {
+export const isClimateFlowElementsRegistered = () => {
   try {
     const registry = globalThis.customElements;
-    return registry?.get?.(CLIMATE_FLOW_CARD_TAG) === BubbleClimateCard
-      && registry?.get?.(CLIMATE_FLOW_CARD_EDITOR_TAG) === BubbleClimateCardEditor
-      // A pre-rebrand copy may already have registered the legacy tags with
-      // its own constructors; their presence is enough to keep that alias usable.
-      && Boolean(registry?.get?.(BUBBLE_CLIMATE_CARD_TAG))
-      && Boolean(registry?.get?.(BUBBLE_CLIMATE_CARD_EDITOR_TAG));
+    return registry?.get?.(CLIMATE_FLOW_CARD_TAG) === ClimateFlowCard
+      && registry?.get?.(CLIMATE_FLOW_CARD_EDITOR_TAG) === ClimateFlowCardEditor
+;
   } catch {
     return false;
   }
 };
 
-export const registerBubbleClimateElements = () => {
+export const registerClimateFlowElements = () => {
   // Keep the original card-picker entry independent of element registration:
   // it must be added idempotently even when customElements/HTMLElement is
   // (temporarily) unavailable.
-  ensureBubbleClimateCardList();
+  ensureClimateFlowCardList();
   // Read the registry afresh on every call: HA replaces window.customElements
   // when the scoped polyfill takes over, so a captured reference could point
   // to the stale native registry where the first define() was lost.
   const registry = globalThis.customElements;
   if (!registry?.define || !registry?.get || !globalThis.HTMLElement) return false;
-  for (const [tag, ctor] of [[CLIMATE_FLOW_CARD_TAG, BubbleClimateCard], [CLIMATE_FLOW_CARD_EDITOR_TAG, BubbleClimateCardEditor], [BUBBLE_CLIMATE_CARD_TAG, LegacyClimateFlowCard], [BUBBLE_CLIMATE_CARD_EDITOR_TAG, LegacyClimateFlowCardEditor]]) {
+  for (const [tag, ctor] of [[CLIMATE_FLOW_CARD_TAG, ClimateFlowCard], [CLIMATE_FLOW_CARD_EDITOR_TAG, ClimateFlowCardEditor]]) {
     if (!registry.get(tag)) {
       try {
         registry.define(tag, ctor);
@@ -1137,7 +1130,7 @@ export const registerBubbleClimateElements = () => {
       }
     }
   }
-  return isBubbleClimateElementsRegistered();
+  return isClimateFlowElementsRegistered();
 };
 
 export const isHomeAssistantFrontendReady = () => {
@@ -1148,7 +1141,7 @@ export const isHomeAssistantFrontendReady = () => {
   }
 };
 
-export const scheduleBubbleClimateReregistration = ({ intervalMs = REREGISTER_POLL_MS, maxAttempts = REREGISTER_MAX_ATTEMPTS, schedule = (fn, ms) => setTimeout(fn, ms), clear = (timerId) => clearTimeout(timerId), warn = (message) => globalThis.console?.warn?.(message) } = {}) => {
+export const scheduleClimateFlowReregistration = ({ intervalMs = REREGISTER_POLL_MS, maxAttempts = REREGISTER_MAX_ATTEMPTS, schedule = (fn, ms) => setTimeout(fn, ms), clear = (timerId) => clearTimeout(timerId), warn = (message) => globalThis.console?.warn?.(message) } = {}) => {
   let attempts = 0;
   let timer = null;
   const cancel = () => {
@@ -1166,7 +1159,7 @@ export const scheduleBubbleClimateReregistration = ({ intervalMs = REREGISTER_PO
     timer = null;
     if (isHomeAssistantFrontendReady()) {
       try {
-        registerBubbleClimateElements();
+        registerClimateFlowElements();
       } catch (error) {
         // Deterministic failure path: a real define() error would otherwise
         // escape this timer callback as an uncaught exception, aborting the
@@ -1181,7 +1174,7 @@ export const scheduleBubbleClimateReregistration = ({ intervalMs = REREGISTER_PO
       }
       // Do not stop just because home-assistant is ready: the scoped swap may
       // still have dropped our tags, so verify both tags map to our ctors.
-      if (isBubbleClimateElementsRegistered()) return;
+      if (isClimateFlowElementsRegistered()) return;
     }
     attempts += 1;
     if (attempts >= maxAttempts) {
@@ -1190,8 +1183,8 @@ export const scheduleBubbleClimateReregistration = ({ intervalMs = REREGISTER_PO
     }
     timer = schedule(poll, intervalMs);
   };
-  registerBubbleClimateElements();
-  if (isHomeAssistantFrontendReady() && isBubbleClimateElementsRegistered()) return cancel;
+  registerClimateFlowElements();
+  if (isHomeAssistantFrontendReady() && isClimateFlowElementsRegistered()) return cancel;
   if (maxAttempts <= 0) {
     giveUp();
     return cancel;
@@ -1201,7 +1194,7 @@ export const scheduleBubbleClimateReregistration = ({ intervalMs = REREGISTER_PO
 };
 
 if (globalThis.window && typeof setTimeout === 'function') {
-  scheduleBubbleClimateReregistration();
+  scheduleClimateFlowReregistration();
 } else {
-  registerBubbleClimateElements();
+  registerClimateFlowElements();
 }

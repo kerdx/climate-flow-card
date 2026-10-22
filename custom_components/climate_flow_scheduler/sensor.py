@@ -16,7 +16,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
 class SchedulerSensor(SensorEntity):
     _attr_has_entity_name = True
     _attr_name = "Programs"
-    _attr_unique_id = "bubble_climate_scheduler_programs"
+    _attr_unique_id = "climate_flow_scheduler_programs"
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_icon = "mdi:calendar-clock"
 

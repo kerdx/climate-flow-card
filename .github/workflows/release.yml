@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Version to release; must match manifest.json and the newest CHANGELOG section (e.g. 0.2.1)"
+        description: "Version to release; must match manifest.json and the newest CHANGELOG section (e.g. 1.0.0)"
         required: true
         type: string
 
@@ -22,9 +22,9 @@ jobs:
         env:
           VERSION: ${{ inputs.version }}
         run: |
-          manifest_version="$(python3 -c 'import json; print(json.load(open("custom_components/bubble_climate_scheduler/manifest.json"))["version"])')"
+          manifest_version="$(python3 -c 'import json; print(json.load(open("custom_components/climate_flow_scheduler/manifest.json"))["version"])')"
           if [ "$VERSION" != "$manifest_version" ]; then
-            echo "::error::Requested version $VERSION does not match manifest version $manifest_version. Update custom_components/bubble_climate_scheduler/manifest.json and CHANGELOG.md first."
+            echo "::error::Requested version $VERSION does not match manifest version $manifest_version. Update custom_components/climate_flow_scheduler/manifest.json and CHANGELOG.md first."
             exit 1
           fi
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
@@ -69,7 +69,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ env.VERSION }}
         run: |
-          python3 -m zipfile -c "climate-flow-card-${VERSION}.zip" custom_components/bubble_climate_scheduler/
+          python3 -m zipfile -c "climate-flow-card-${VERSION}.zip" custom_components/climate_flow_scheduler/
           gh release create "v${VERSION}" \
             "climate-flow-card-${VERSION}.zip" \
             --title "v${VERSION}" \
