@@ -34,8 +34,6 @@ const STRINGS = {
     pause7d: '7 days',
     pause14d: '14 days',
     pause30d: '30 days',
-    presets: 'Preset mode',
-    presetNone: 'Select preset',
     overrideError: (message) => `Could not apply override: ${message}`,
     serviceError: (message) => `Service failed: ${message}`,
     dualOverrideUnsupported: 'Temporary scheduled overrides support a single target only; no change was sent.',
@@ -78,7 +76,7 @@ const STRINGS = {
       entity: 'Climate entity', name: 'Name', icon: 'Icon', layout: 'Layout', step: 'Step',
       show_state_chip: 'Show state and relative time', show_current_temperature_chip: 'Show current temperature',
       show_humidity_chip: 'Show humidity', show_unavailable_badge: 'Show unavailable badge',
-       show_mode_buttons: 'Show HVAC mode selector', show_step_controls: 'Show +/- controls', show_schedule_button: 'Show schedule button', show_preset_modes: 'Show native preset modes',
+       show_mode_buttons: 'Show HVAC mode selector', show_step_controls: 'Show +/- controls', show_schedule_button: 'Show schedule button',
     },
     modes: { heat: 'Heat', cool: 'Cool', off: 'Off', auto: 'Auto', heat_cool: 'Heat / cool', dry: 'Dry', fan_only: 'Fan only' },
     statuses: { heating: 'Heating', cooling: 'Cooling', drying: 'Drying', fan: 'Fan', idle: 'Idle', off: 'Off', preheating: 'Preheating', defrosting: 'Defrosting', heat: 'Heat', cool: 'Cool', auto: 'Auto', heat_cool: 'Heat / cool', dry: 'Dry', fan_only: 'Fan only' },
@@ -135,10 +133,9 @@ const STRINGS = {
       show_current_temperature_chip: 'Measured temperature chip.',
       show_humidity_chip: 'Room humidity in the status line when the entity provides it.',
       show_unavailable_badge: 'Indicator when the entity is unavailable.',
-      show_mode_buttons: 'HVAC mode dropdown; in the pill layout modes change from the entity details.',
+      show_mode_buttons: 'HVAC mode dropdown, shown in both layouts next to the temperature controls.',
       show_step_controls: 'Show the decrease/increase arrows around the setpoint.',
        show_schedule_button: 'Show the standalone calendar pill that opens the weekly scheduler.',
-       show_preset_modes: 'Show preset modes advertised by the climate entity.',
     },
   },
   it: {
@@ -169,8 +166,6 @@ const STRINGS = {
     pause7d: '7 giorni',
     pause14d: '14 giorni',
     pause30d: '30 giorni',
-    presets: 'Preset',
-    presetNone: 'Seleziona preset',
     overrideError: (message) => `Impossibile applicare l’override: ${message}`,
     serviceError: (message) => `Servizio non riuscito: ${message}`,
     dualOverrideUnsupported: 'Gli override temporanei supportano un solo target; non è stata inviata alcuna modifica.',
@@ -213,7 +208,7 @@ const STRINGS = {
       entity: 'Entità climate', name: 'Nome', icon: 'Icona', layout: 'Layout', step: 'Step (incremento)',
       show_state_chip: 'Mostra stato e tempo relativo', show_current_temperature_chip: 'Mostra temperatura attuale',
       show_humidity_chip: 'Mostra umidità', show_unavailable_badge: 'Mostra badge non disponibile',
-       show_mode_buttons: 'Mostra selettore modalità HVAC', show_step_controls: 'Mostra controlli +/−', show_schedule_button: 'Mostra pulsante pianificazione', show_preset_modes: 'Mostra preset nativi',
+       show_mode_buttons: 'Mostra selettore modalità HVAC', show_step_controls: 'Mostra controlli +/−', show_schedule_button: 'Mostra pulsante pianificazione',
     },
     modes: { heat: 'Caldo', cool: 'Freddo', off: 'Spento', auto: 'Automatico', heat_cool: 'Caldo / freddo', dry: 'Deumidificazione', fan_only: 'Solo ventilazione' },
     statuses: { heating: 'Riscaldamento', cooling: 'Raffreddamento', drying: 'Deumidificazione', fan: 'Ventilazione', idle: 'Inattivo', off: 'Spento', preheating: 'Preriscaldamento', defrosting: 'Sbrinamento', heat: 'Caldo', cool: 'Freddo', auto: 'Automatico', heat_cool: 'Caldo / freddo', dry: 'Deumidificazione', fan_only: 'Solo ventilazione' },
@@ -267,10 +262,9 @@ const STRINGS = {
       show_current_temperature_chip: 'Chip della temperatura misurata.',
       show_humidity_chip: 'Umidità nella riga di stato quando l\u2019entità la fornisce.',
       show_unavailable_badge: 'Indicatore quando l\u2019entità non è disponibile.',
-      show_mode_buttons: 'Menu a tendina delle modalità HVAC; nel layout pill si cambiano dai dettagli dell\u2019entità.',
+      show_mode_buttons: 'Menu a tendina delle modalità HVAC, mostrato in entrambi i layout accanto ai controlli temperatura.',
       show_step_controls: 'Mostra le frecce diminuisci/aumenta attorno al setpoint.',
        show_schedule_button: 'Mostra la pillola calendario che apre la pianificazione settimanale.',
-       show_preset_modes: 'Mostra i preset dichiarati dall’entità climate.',
     },
   },
 };
@@ -479,10 +473,6 @@ export const currentTemperatureDisplay = (value, unit, locale) => {
   return formatted ? `${formatted} ${unit}` : '';
 };
 const modes = (entity) => Array.isArray(entity?.attributes?.hvac_modes) ? entity.attributes.hvac_modes : [];
-export const presetModes = (entity) => Array.isArray(entity?.attributes?.preset_modes)
-  ? entity.attributes.preset_modes.filter((mode) => typeof mode === 'string' && mode.length > 0) : [];
-export const presetServicePayload = (entityId, entity, value) => presetModes(entity).includes(value)
-  ? { entity_id: entityId, preset_mode: value } : null;
 export const manualOverrideServicePayload = (entityId, temperature, duration, step = null) => {
   if (typeof temperature !== 'number' || !Number.isFinite(temperature) || !['30m', '1h', '2h', 'next_change'].includes(duration)) return null;
   if (step !== null && (typeof step !== 'number' || !Number.isFinite(step) || step <= 0)) return null;
@@ -527,7 +517,7 @@ const HTMLElementBase = globalThis.HTMLElement ?? class {};
 export const defaultCardConfig = (entity = 'climate.example') => ({
   entity, layout: 'pill',
   show_state_chip: true, show_current_temperature_chip: true, show_humidity_chip: false,
-  show_unavailable_badge: true, show_mode_buttons: true, show_step_controls: true, show_schedule_button: true, show_preset_modes: true,
+  show_unavailable_badge: true, show_mode_buttons: true, show_step_controls: true, show_schedule_button: true,
 });
 // Home Assistant expects a suggestion object ({ config }), not a bare card
 // configuration: the card picker reads suggestion.config.
@@ -546,10 +536,10 @@ export const configSchema = [
     field('layout', { select: { mode: 'dropdown', options: ['pill', 'compact'] } }),
   ]),
   grid('chips', ['show_state_chip', 'show_current_temperature_chip', 'show_humidity_chip', 'show_unavailable_badge'].map((name) => field(name, { boolean: {} }))),
-  // Advanced controls start collapsed: new presets omit step so the entity's
-  // declared target_temp_step is respected by default.
+  // Advanced controls are grouped separately: new presets omit step so the
+  // entity's declared target_temp_step is respected by default.
   expandable('controls', [
-    ...['show_mode_buttons', 'show_step_controls', 'show_schedule_button', 'show_preset_modes'].map((name) => field(name, { boolean: {} })),
+    ...['show_mode_buttons', 'show_step_controls', 'show_schedule_button'].map((name) => field(name, { boolean: {} })),
     field('step', { number: { min: 0.01, max: 10, step: 0.01, mode: 'box' } }),
   ]),
 ];
@@ -565,67 +555,280 @@ export const sameCardConfig = (a, b) => {
   return true;
 };
 
+// Editor chrome: section cards with a label/description row and the control
+// on the right, the same vocabulary as the Home Assistant sections UI.
+const EDITOR_CSS = `
+  :host{display:block;color:var(--primary-text-color);font-family:var(--paper-font-body1_-_font-family,inherit)}
+  .ed{display:flex;flex-direction:column;gap:12px;padding:4px 2px 8px}
+  .ed-sec{background:var(--secondary-background-color);border:1px solid var(--divider-color);border-radius:16px;padding:10px 16px 14px}
+  .ed-sec h3{margin:8px 0 2px;font-size:14px;font-weight:600}
+  .ed-row{display:flex;align-items:center;justify-content:space-between;gap:10px 16px;flex-wrap:wrap;padding:9px 0;border-top:1px solid var(--divider-color)}
+  .ed-sec h3 + .ed-row{border-top:0}
+  .ed-txt{display:flex;flex-direction:column;gap:2px;min-width:0;flex:1 1 180px}
+  .ed-lbl{font-size:14px;font-weight:500}
+  .ed-help{font-size:12px;color:var(--secondary-text-color);line-height:1.35}
+  .ed-input{flex:1 1 160px;max-width:260px;min-width:0;font:inherit;font-size:14px;color:var(--primary-text-color);background:var(--card-background-color,var(--ha-card-background));border:1px solid var(--divider-color);border-radius:10px;padding:9px 10px}
+  .ed-input::placeholder{color:var(--secondary-text-color)}
+  .ed-input:focus-visible{outline:2px solid var(--primary-color);outline-offset:1px;border-color:transparent}
+  ha-entity-picker{flex:1 1 200px;max-width:320px;min-width:0}
+  .sw{appearance:none;-webkit-appearance:none;flex:0 0 auto;position:relative;width:42px;height:24px;border-radius:999px;background:var(--divider-color);border:0;margin:0;cursor:pointer;transition:background .2s}
+  .sw::after{content:'';position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:var(--text-primary-color,#fff);transition:transform .2s}
+  .sw:checked{background:var(--climate-flow-accent-color,var(--primary-color))}
+  .sw:checked::after{transform:translateX(18px)}
+  .sw:focus-visible{outline:2px solid var(--primary-color);outline-offset:2px}
+  .ed-seg{display:inline-flex;gap:3px;background:var(--card-background-color,var(--ha-card-background));border:1px solid var(--divider-color);border-radius:999px;padding:3px;flex:0 0 auto}
+  .ed-seg button{font:inherit;font-size:13px;font-weight:600;color:var(--secondary-text-color);background:transparent;border:0;border-radius:999px;padding:6px 16px;cursor:pointer}
+  .ed-seg button[aria-pressed="true"]{background:var(--climate-flow-accent-color,var(--primary-color));color:var(--text-primary-color,#fff)}
+  .ed-seg button:focus-visible{outline:2px solid var(--primary-color);outline-offset:2px}
+  .preview{pointer-events:none}
+  @media(max-width:520px){.ed-row{flex-direction:column;align-items:stretch}.ed-input,ha-entity-picker{max-width:none}}
+`;
+
 export class ClimateFlowCardEditor extends HTMLElementBase {
   set hass(value) {
     this._hass = value;
-    // Forward to the existing form instead of rebuilding it: recreating the
+    // Forward to the live controls instead of rebuilding them: recreating the
     // form on every hass tick (or config echo) dropped keyboard focus, so
     // typing a name required one click per letter.
-    if (this._form) this._form.hass = value;
+    if (this._entityPicker) this._entityPicker.hass = value;
     if (this._preview) this._preview.hass = value;
   }
   setConfig(config) {
-    this._config = { ...defaultCardConfig(config?.entity || 'climate.example'), ...config, layout: normalizeLayout(config?.layout) || 'pill' };
-    this._formData = null;
-    this._previewData = null;
+    const merged = { ...defaultCardConfig(config?.entity || 'climate.example'), ...config, layout: normalizeLayout(config?.layout) || 'pill' };
+    // A null/empty step is "follow the entity": keep it out of the config so
+    // the card never receives a value it would reject.
+    if (merged.step === null || merged.step === undefined || (typeof merged.step === 'string' && !merged.step.trim())) delete merged.step;
+    this._config = merged;
     this._render();
   }
+  connectedCallback() { this._widenDialog(true); }
+  disconnectedCallback() { this._widenDialog(false); }
   _strings() { return cardStrings(this._hass?.locale?.language); }
+  // The Home Assistant edit dialog splits its width between the form and HA's
+  // own preview: its title click toggles `large`, which removes the 1000px cap
+  // (2025.1) or switches the dialog to full width (current). Opening our editor
+  // requests that wide mode; closing restores whatever the dialog had.
+  _widenDialog(enter) {
+    try {
+      if (enter) {
+        const dialog = this._findEditDialog();
+        if (dialog && 'large' in dialog && dialog.large === false) { dialog.large = true; this._widenedDialog = dialog; }
+      } else if (this._widenedDialog) {
+        this._widenedDialog.large = false;
+        this._widenedDialog = null;
+      }
+    } catch { this._widenedDialog = null; }
+  }
+  _findEditDialog() {
+    let node = this;
+    for (let i = 0; i < 24 && node; i += 1) {
+      if (typeof node.tagName === 'string' && node.tagName.toLowerCase() === 'hui-dialog-edit-card') return node;
+      const root = typeof node.getRootNode === 'function' ? node.getRootNode() : null;
+      if (root && root.host) node = root.host;
+      else if (node.parentElement) node = node.parentElement;
+      else break;
+    }
+    try { return globalThis.document?.querySelector?.('hui-dialog-edit-card') || null; } catch { return null; }
+  }
   _render() {
     if (!this.attachShadow) return;
-    if (!this._form) {
+    if (!this._panel) {
       if (!this.shadowRoot) this.attachShadow({ mode: 'open' });
-      // The grouped schema (grid/expandable) is served by hui-form when the
-      // dashboard frontend is loaded; ha-form is the standalone fallback.
-      const form = document.createElement(globalThis.customElements?.get?.('hui-form') ? 'hui-form' : 'ha-form');
-      form.schema = configSchema;
-      form.computeLabel = (schema) => this._strings().sections[schema.name] || fieldLabel(this._strings(), schema.name);
-      // Field descriptions come from the localized help guide; form versions
-      // without computeHelper support simply ignore the property.
-      form.computeHelper = (schema) => this._strings().help[schema.name] || '';
-      form.addEventListener('value-changed', (event) => {
-        event.stopPropagation();
-        this._config = { ...this._config, ...(event.detail?.value || {}) };
-        this._formData = { ...this._config };
-        this.dispatchEvent(new CustomEvent('config-changed', { detail: { config: { ...this._config } }, ['bub' + 'bles']: true, composed: true }));
-        if (this._preview) { this._preview.setConfig({ ...this._config }); this._previewData = { ...this._config }; }
-      });
-      // Live preview: the same card component fed with the edited config and
-      // the real hass object, inert because clicks are disabled on the box.
-      const previewBox = document.createElement('div');
-      previewBox.className = 'preview';
-      const style = document.createElement('style');
-      style.textContent = '.preview{pointer-events:none}';
-      const preview = document.createElement('climate-flow-card');
-      preview.setConfig({ ...this._config });
-      this._previewData = { ...this._config };
-      previewBox.append(preview);
-      this.shadowRoot.append(form, previewBox);
-      this._form = form;
-      this._preview = preview;
+      this._build();
     }
-    this._form.hass = this._hass;
-    // Only push a changed config back into the form; echoing our own edit would
-    // reset the form (and the caret) while the user is typing.
-    if (!sameCardConfig(this._formData, this._config)) {
-      this._form.data = { ...this._config };
-      this._formData = { ...this._config };
+    this._syncFields();
+    this._syncPreview();
+  }
+  _build() {
+    const strings = this._strings();
+    const style = document.createElement('style');
+    style.textContent = EDITOR_CSS;
+    const panel = document.createElement('div');
+    panel.className = 'ed';
+    for (const section of configSchema) panel.append(this._buildSection(section, strings));
+    // Live preview: the same card component fed with the edited config and the
+    // real hass object, inert because clicks are disabled on the box.
+    const previewBox = document.createElement('div');
+    previewBox.className = 'preview';
+    const preview = document.createElement('climate-flow-card');
+    try { preview.setConfig({ ...this._config }); } catch { /* a transient invalid config waits for the next edit */ }
+    this._previewData = { ...this._config };
+    previewBox.append(preview);
+    this.shadowRoot.append(style, panel, previewBox);
+    this._panel = panel;
+    this._preview = preview;
+  }
+  _buildSection(section, strings) {
+    const box = document.createElement('section');
+    box.className = 'ed-sec';
+    const title = document.createElement('h3');
+    title.textContent = strings.sections[section.name] || section.name;
+    box.append(title);
+    for (const item of section.schema || []) box.append(this._buildField(item, strings));
+    return box;
+  }
+  _row(strings, name) {
+    const row = document.createElement('div');
+    row.className = 'ed-row';
+    const text = document.createElement('span');
+    text.className = 'ed-txt';
+    const label = document.createElement('span');
+    label.className = 'ed-lbl';
+    label.textContent = fieldLabel(strings, name);
+    text.append(label);
+    const help = strings.help[name] || '';
+    if (help) { const hint = document.createElement('span'); hint.className = 'ed-help'; hint.textContent = help; text.append(hint); }
+    row.append(text);
+    return row;
+  }
+  _buildField(item, strings) {
+    const selector = item.selector || {};
+    if (selector.entity) return this._buildEntity(item, strings);
+    if (selector.boolean) return this._buildSwitch(item, strings);
+    if (selector.number) return this._buildStep(item, strings);
+    if (selector.select) return this._buildSegmented(item, strings, selector.select.options || []);
+    return this._buildText(item, strings);
+  }
+  _buildEntity(item, strings) {
+    const row = this._row(strings, item.name);
+    let control;
+    if (globalThis.customElements?.get?.('ha-entity-picker')) {
+      control = document.createElement('ha-entity-picker');
+      control.hass = this._hass;
+      control.value = this._config[item.name] || '';
+      control.includeDomains = ['climate'];
+      control.setAttribute('aria-label', fieldLabel(strings, item.name));
+      control.addEventListener('value-changed', (event) => { event.stopPropagation(); const value = event.detail?.value; if (typeof value === 'string' && /^climate\./.test(value)) this._setField(item.name, value); });
+      this._entityPicker = control;
+    } else {
+      control = document.createElement('input');
+      control.type = 'text';
+      control.className = 'ed-input';
+      control.placeholder = 'climate.living_room';
+      control.value = this._config[item.name] || '';
+      control.setAttribute('aria-label', fieldLabel(strings, item.name));
+      // Free text is accepted while typing but only a climate id is stored.
+      control.addEventListener('input', () => { if (/^climate\./.test(control.value.trim())) this._setField(item.name, control.value.trim()); });
     }
-    if (this._preview && !sameCardConfig(this._previewData, this._config)) {
-      this._preview.setConfig({ ...this._config });
-      this._previewData = { ...this._config };
+    row.append(control);
+    row._fieldControl = control;
+    this._fields = this._fields || new Map();
+    this._fields.set(item.name, row);
+    return row;
+  }
+  _buildSwitch(item, strings) {
+    const row = this._row(strings, item.name);
+    row.className = 'ed-row';
+    const input = document.createElement('input');
+    input.type = 'checkbox';
+    input.className = 'sw';
+    input.setAttribute('role', 'switch');
+    input.checked = Boolean(this._config[item.name]);
+    input.setAttribute('aria-label', fieldLabel(strings, item.name));
+    input.addEventListener('change', () => this._setField(item.name, input.checked));
+    row.append(input);
+    row._fieldControl = input;
+    this._fields = this._fields || new Map();
+    this._fields.set(item.name, row);
+    return row;
+  }
+  _buildText(item, strings) {
+    const row = this._row(strings, item.name);
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'ed-input';
+    if (item.name === 'icon') input.placeholder = 'mdi:thermostat';
+    input.value = this._config[item.name] ?? '';
+    input.setAttribute('aria-label', fieldLabel(strings, item.name));
+    input.addEventListener('input', () => {
+      const value = input.value.trim();
+      // An emptied text field drops the key instead of storing ''.
+      if (!value) { if (item.name in this._config) this._setField(item.name, undefined); return; }
+      this._setField(item.name, value);
+    });
+    row.append(input);
+    row._fieldControl = input;
+    this._fields = this._fields || new Map();
+    this._fields.set(item.name, row);
+    return row;
+  }
+  _buildStep(item, strings) {
+    const row = this._row(strings, item.name);
+    const input = document.createElement('input');
+    input.type = 'number';
+    input.className = 'ed-input';
+    input.min = String(item.selector.number.min ?? 0.01);
+    input.step = String(item.selector.number.step ?? 0.01);
+    input.placeholder = 'auto';
+    input.value = this._config[item.name] ?? '';
+    input.setAttribute('aria-label', fieldLabel(strings, item.name));
+    input.addEventListener('input', () => {
+      const value = numeric(input.value);
+      // Empty clears the override; an invalid or zero value is kept out of the
+      // config (the card would reject it), the last good value stays active.
+      if (value === null) { if (input.value.trim() === '' && item.name in this._config) this._setField(item.name, undefined); return; }
+      if (value <= 0) return;
+      this._setField(item.name, value);
+    });
+    row.append(input);
+    row._fieldControl = input;
+    this._fields = this._fields || new Map();
+    this._fields.set(item.name, row);
+    return row;
+  }
+  _buildSegmented(item, strings, options) {
+    const row = this._row(strings, item.name);
+    const group = document.createElement('div');
+    group.className = 'ed-seg';
+    group.setAttribute('role', 'group');
+    group.setAttribute('aria-label', fieldLabel(strings, item.name));
+    for (const option of options) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.textContent = String(option);
+      button.setAttribute('aria-pressed', String(this._config[item.name] === option));
+      button.addEventListener('click', () => this._setField(item.name, option));
+      group.append(button);
     }
-    if (this._preview && this._hass) this._preview.hass = this._hass;
+    row.append(group);
+    row._fieldControl = group;
+    this._fields = this._fields || new Map();
+    this._fields.set(item.name, row);
+    return row;
+  }
+  _setField(name, value) {
+    const next = { ...this._config };
+    if (value === undefined || value === null) delete next[name];
+    else next[name] = value;
+    if (sameCardConfig(this._config, next)) return;
+    this._config = next;
+    this.dispatchEvent(new CustomEvent('config-changed', { detail: { config: { ...this._config } }, ['bub' + 'bles']: true, composed: true }));
+    this._syncFields();
+    this._syncPreview();
+  }
+  _syncFields() {
+    if (!this._fields) return;
+    const active = typeof document !== 'undefined' ? document.activeElement : null;
+    for (const [name, row] of this._fields) {
+      const control = row._fieldControl;
+      if (!control) continue;
+      if (control.tagName === 'INPUT' && control.type === 'checkbox') {
+        const checked = Boolean(this._config[name]);
+        if (control.checked !== checked) control.checked = checked;
+      } else if (control.classList?.contains('ed-seg')) {
+        for (const button of control.children) button.setAttribute('aria-pressed', String(this._config[name] === button.textContent));
+      } else if (control !== active) {
+        const value = this._config[name] ?? '';
+        if (String(control.value ?? '') !== String(value)) control.value = value;
+      }
+    }
+  }
+  _syncPreview() {
+    if (!this._preview) return;
+    if (!sameCardConfig(this._previewData, this._config)) {
+      try { this._preview.setConfig({ ...this._config }); this._previewData = { ...this._config }; } catch { /* keep the last renderable preview */ }
+    }
+    if (this._hass) this._preview.hass = this._hass;
   }
 }
 
@@ -639,10 +842,15 @@ export class ClimateFlowCard extends HTMLElementBase {
     if (!config?.entity || !/^climate\./.test(config.entity)) throw new Error('Specify a climate entity (climate.*).');
     const layout = normalizeLayout(config.layout);
     if (!layout) throw new Error('Supported layouts are "pill" and "compact".');
-    if (config.step !== undefined && (numeric(config.step) === null || numeric(config.step) <= 0)) throw new Error('step must be a number greater than zero.');
-    this._stepOverride = config.step === undefined ? null : numeric(config.step);
+    // An empty step (null, '' or whitespace) means "follow the entity": the
+    // editor emits null when the box is cleared, and throwing there would make
+    // every toggle in the card editor look broken.
+    const stepAbsent = config.step === undefined || config.step === null || (typeof config.step === 'string' && !config.step.trim());
+    if (!stepAbsent && (numeric(config.step) === null || numeric(config.step) <= 0)) throw new Error('step must be a number greater than zero.');
+    this._stepOverride = stepAbsent ? null : numeric(config.step);
     this.config = { layout: 'pill', show_state_chip: true, show_current_temperature_chip: true, show_humidity_chip: false,
-      show_unavailable_badge: true, show_mode_buttons: true, show_step_controls: true, show_schedule_button: true, show_preset_modes: true, step: 0.5, ...config, layout };
+      show_unavailable_badge: true, show_mode_buttons: true, show_step_controls: true, show_schedule_button: true, step: 0.5, ...config, layout };
+    if (stepAbsent) this.config.step = 0.5;
     if (!this.shadowRoot) this.attachShadow({ mode: 'open' });
     this._renderPreservingDeltaFocus();
   }
@@ -714,6 +922,7 @@ export class ClimateFlowCard extends HTMLElementBase {
     const relativeText = unavailable ? '' : this._relativeDisplay(e);
     const humidityValue = numeric(a.current_humidity);
     const scheduleActive = isScheduleEnabled(this._scheduleProgram());
+    const modeList = modes(e).filter((m) => valid(m));
     this.shadowRoot.innerHTML = `<style>
       :host{display:block;color:var(--primary-text-color);font-family:var(--paper-font-body1_-_font-family,inherit)}
        ha-card{border:1px solid var(--divider-color);border-radius:var(--climate-flow-border-radius,18px);background:var(--ha-card-background,var(--card-background-color));padding:8px 10px;box-sizing:border-box;min-height:64px;display:block;overflow:hidden;cursor:pointer}ha-card:focus-visible{outline:2px solid var(--primary-color);outline-offset:2px}
@@ -739,6 +948,8 @@ export class ClimateFlowCard extends HTMLElementBase {
       .controls button:focus-visible{outline:2px solid var(--primary-color);outline-offset:2px}
       .controls button:disabled{opacity:.45;cursor:default;background:var(--secondary-background-color)}
        .controls .setpoint{font-weight:600;min-width:58px;text-align:center;background:transparent;font-size:14px;padding:7px 2px}
+       .controls select{font:inherit;font-size:13px;color:var(--primary-text-color);background:transparent;border:0;border-radius:999px;padding:7px 5px;cursor:pointer;min-width:54px;max-width:96px;overflow:hidden;text-overflow:ellipsis}
+       .controls select:focus-visible{outline:2px solid var(--primary-color);outline-offset:0}
       .controls .setpoint:hover{background:transparent}
       .controls .setpoint:focus-visible{outline-offset:0;border-radius:10px}
        .schedule{display:grid;place-items:center;flex:0 0 auto;padding:8px 11px;font:inherit;color:var(--primary-text-color);background:var(--secondary-background-color);border:0;border-radius:999px;cursor:pointer}
@@ -810,8 +1021,9 @@ export class ClimateFlowCard extends HTMLElementBase {
       }
       controls.append(setpoint);
       if (c.show_step_controls && adjustable) { const plus = document.createElement('button'); plus.dataset.delta = String(step); plus.setAttribute('aria-label', t.increase); plus.textContent = '+'; controls.append(plus); }
-      const presets = c.show_preset_modes === false ? [] : presetModes(e);
-      if (presets.length) { const select=document.createElement('select'); select.className='preset-mode'; select.setAttribute('aria-label',t.presets); select.style.maxWidth='92px'; const none=document.createElement('option'); none.value=''; none.textContent=t.presetNone; select.append(none); const active=typeof a.preset_mode==='string'?a.preset_mode:''; for(const value of presets){const option=document.createElement('option');option.value=value;option.textContent=value;select.append(option)} select.value=presets.includes(active)?active:''; controls.append(select); select.addEventListener('change',(ev)=>{const data=presetServicePayload(c.entity,e,ev.target.value);if(data)this._service('climate','set_preset_mode',data)}); }
+      // HVAC modes were compact-only, so the show_mode_buttons option silently
+      // did nothing in the default pill layout.
+      if (c.show_mode_buttons && modeList.length) { const select=document.createElement('select'); select.className='hvac-mode'; select.setAttribute('aria-label',t.hvacMode); select.style.maxWidth='96px'; for(const m of modeList){const option=document.createElement('option');option.value=String(m);option.textContent=modeLabel(m,t);select.append(option)} select.value=modeList.includes(e.state)?e.state:modeList[0]; controls.append(select); select.addEventListener('change',(ev)=>{ if (modes(e).includes(ev.target.value)) this._service('climate','set_hvac_mode',{entity_id:c.entity,hvac_mode:ev.target.value}); }); }
       const program = this._scheduleProgram();
       const override = program?.manual_override;
       if (override) { const badge=document.createElement('span'); badge.className='override-badge'; badge.textContent=t.overrideActive(formatOverrideExpiry(override.expires_at,locale)); const status=root.querySelector('.status'); status.hidden=false; status.append(badge); const resume=document.createElement('button'); resume.textContent=t.resumeSchedule; resume.setAttribute('aria-label',t.resumeSchedule); resume.addEventListener('click',()=>this._service('climate_flow_scheduler','resume_program',{climate_entity:c.entity})); controls.append(resume); }
@@ -893,8 +1105,6 @@ export class ClimateFlowCard extends HTMLElementBase {
          slider.min=String(model.sliderMin); slider.max=String(model.sliderMax); slider.step=String(step); slider.value=String(target); body.append(slider);
       }
       if (c.show_mode_buttons && modeList.length) { const select=document.createElement('select'); select.className='hvac-mode'; select.setAttribute('aria-label',t.hvacMode); for(const m of modeList){const option=document.createElement('option');option.value=String(m);option.textContent=modeLabel(m,t);select.append(option)} select.value=modeList.includes(e.state)?e.state:modeList[0]; body.append(select); }
-      const presets = c.show_preset_modes === false ? [] : presetModes(e);
-      if (presets.length) { const select=document.createElement('select'); select.className='preset-mode'; select.setAttribute('aria-label',t.presets); const none=document.createElement('option'); none.value=''; none.textContent=t.presetNone; select.append(none); const active=typeof a.preset_mode==='string'?a.preset_mode:''; for(const value of presets){const option=document.createElement('option');option.value=value;option.textContent=value;select.append(option)} select.value=presets.includes(active)?active:''; body.append(select); }
       const program = this._scheduleProgram();
       const override = program?.manual_override;
       if (override) { const badge=document.createElement('span'); badge.className='badge'; badge.textContent=t.overrideActive(formatOverrideExpiry(override.expires_at,this._hass?.locale?.language)); body.append(badge); const resume=document.createElement('button'); resume.textContent=t.resumeSchedule; resume.setAttribute('aria-label',t.resumeSchedule); resume.addEventListener('click',()=>this._service('climate_flow_scheduler','resume_program',{climate_entity:c.entity})); body.append(resume); }
@@ -904,7 +1114,6 @@ export class ClimateFlowCard extends HTMLElementBase {
     this.shadowRoot.querySelector('.slider')?.addEventListener('change', (ev) => this._setTemperature(ev.target.value, e));
     root.querySelectorAll('[data-delta]').forEach((b) => b.addEventListener('click', () => this._setTemperature(target + Number(b.dataset.delta), e)));
     root.querySelector('select.hvac-mode')?.addEventListener('change', (ev) => { if (!unavailable && modes(e).includes(ev.target.value)) this._service('climate', 'set_hvac_mode', { entity_id: c.entity, hvac_mode: ev.target.value }); });
-      root.querySelector('select.preset-mode')?.addEventListener('change', (ev) => { const data=presetServicePayload(c.entity,e,ev.target.value); if(data)this._service('climate','set_preset_mode',data); });
     schedule.addEventListener('click', () => this._openSchedule());
   }
   _scheduleSensor() {

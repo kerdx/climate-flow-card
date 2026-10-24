@@ -41,6 +41,12 @@ class PackageTests(unittest.TestCase):
         self.assertTrue(data.startswith(b"\x89PNG\r\n\x1a\n"))
         self.assertEqual(int.from_bytes(data[16:20], "big"), 256)
         self.assertEqual(int.from_bytes(data[20:24], "big"), 256)
+        # The high-resolution variant used on retina displays.
+        icon_2x = ROOT / "custom_components/climate_flow_scheduler/brand/icon@2x.png"
+        data_2x = icon_2x.read_bytes()
+        self.assertTrue(data_2x.startswith(b"\x89PNG\r\n\x1a\n"))
+        self.assertEqual(int.from_bytes(data_2x[16:20], "big"), 512)
+        self.assertEqual(int.from_bytes(data_2x[20:24], "big"), 512)
 
     def test_services_documentation_covers_registered_services(self):
         services = ROOT / "custom_components/climate_flow_scheduler/services.yaml"

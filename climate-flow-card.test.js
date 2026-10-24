@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { ClimateFlowCard, ClimateFlowCardEditor, CLIMATE_FLOW_CARD_TAG, CLIMATE_FLOW_CARD_EDITOR_TAG, registerClimateFlowElements, isClimateFlowElementsRegistered, isHomeAssistantFrontendReady, scheduleClimateFlowReregistration, clampTarget, temperaturePayload, targetModel, hvacToggleMode, scheduleDraft, validateScheduleDraft, defaultCardConfig, configSchema, configSchemaFields, getEntitySuggestion, sameCardConfig, errorLabel, effectiveStep, normalizeLayout, isClimateActive, isScheduleEnabled, awayTemperaturePayload, schedulableModes, presetModes, presetServicePayload, manualOverrideServicePayload, overrideDurationChoices, formatOverrideExpiry, overrideFocusSelector,
+import { ClimateFlowCard, ClimateFlowCardEditor, CLIMATE_FLOW_CARD_TAG, CLIMATE_FLOW_CARD_EDITOR_TAG, registerClimateFlowElements, isClimateFlowElementsRegistered, isHomeAssistantFrontendReady, scheduleClimateFlowReregistration, clampTarget, temperaturePayload, targetModel, hvacToggleMode, scheduleDraft, validateScheduleDraft, defaultCardConfig, configSchema, configSchemaFields, getEntitySuggestion, sameCardConfig, errorLabel, effectiveStep, normalizeLayout, isClimateActive, isScheduleEnabled, awayTemperaturePayload, schedulableModes, manualOverrideServicePayload, overrideDurationChoices, formatOverrideExpiry, overrideFocusSelector,
   pauseServicePayload, pauseDurationChoices, activePause, PAUSE_DURATIONS, climateStatusKey, statusLabel, modeLabel, resolveLanguage, cardStrings, fieldLabel, pickEntityTimestamp, formatRelativeTime, formatNumber, pillStatusParts, currentTemperatureDisplay } from './custom_components/climate_flow_scheduler/www/climate-flow-card.js';
 
 test('module imports without browser DOM and exports the card class', () => {
@@ -39,24 +39,26 @@ test('editor schema exposes climate entity and all supported visual options', ()
   const fields = configSchemaFields();
   assert.deepEqual(fields[0].selector.entity, { filter: { domain: ['climate'] } });
   const names = fields.map((entry) => entry.name);
-  for (const name of ['entity', 'name', 'icon', 'layout', 'step', 'show_state_chip', 'show_current_temperature_chip', 'show_humidity_chip', 'show_unavailable_badge', 'show_mode_buttons', 'show_step_controls', 'show_schedule_button', 'show_preset_modes']) assert.ok(names.includes(name));
+  for (const name of ['entity', 'name', 'icon', 'layout', 'step', 'show_state_chip', 'show_current_temperature_chip', 'show_humidity_chip', 'show_unavailable_badge', 'show_mode_buttons', 'show_step_controls', 'show_schedule_button']) assert.ok(names.includes(name));
+  // The native preset dropdown next to the setpoint is gone for good.
+  assert.equal(names.includes('show_preset_modes'), false);
   assert.deepEqual(fields.find((entry) => entry.name === 'layout').selector, { select: { mode: 'dropdown', options: ['pill', 'compact'] } });
   assert.deepEqual(defaultCardConfig('climate.living_room'), {
     entity: 'climate.living_room', layout: 'pill',
     show_state_chip: true, show_current_temperature_chip: true, show_humidity_chip: false,
-    show_unavailable_badge: true, show_mode_buttons: true, show_step_controls: true, show_schedule_button: true, show_preset_modes: true,
+    show_unavailable_badge: true, show_mode_buttons: true, show_step_controls: true, show_schedule_button: true,
   });
+  assert.equal(Object.hasOwn(defaultCardConfig('climate.living_room'), 'show_preset_modes'), false);
   assert.equal(typeof ClimateFlowCard.getStubConfig, 'function');
   assert.equal(typeof ClimateFlowCard.getConfigElement, 'function');
 });
 
-test('preset modes are exposed only from advertised native options and localized override actions exist', () => {
-  assert.deepEqual(presetModes({ attributes: { preset_modes: ['eco', 'comfort', 3, ''] } }), ['eco', 'comfort']);
-  assert.deepEqual(presetModes({ attributes: {} }), []);
-  const native = { attributes: { preset_modes: ['eco', 'comfort'] } };
-  assert.deepEqual(presetServicePayload('climate.room', native, 'eco'), { entity_id: 'climate.room', preset_mode: 'eco' });
-  assert.equal(presetServicePayload('climate.room', native, ''), null);
-  assert.equal(presetServicePayload('climate.room', native, 'unknown'), null);
+test('no preset dropdown remains and localized override actions exist', () => {
+  // Presets (none/hold/program) were dropped from the card: the climate
+  // entity details remain the place to change them.
+  const source = readFileSync(new URL('./custom_components/climate_flow_scheduler/www/climate-flow-card.js', import.meta.url), 'utf8');
+  assert.doesNotMatch(source, /preset-mode|presetModes|presetServicePayload|show_preset_modes|set_preset_mode/);
+  assert.doesNotMatch(source, /presetNone|t\.presets/);
   assert.deepEqual(manualOverrideServicePayload('climate.room', 21, '30m', 0.5), { climate_entity: 'climate.room', temperature: 21, duration: '30m', step: 0.5 });
   assert.deepEqual(manualOverrideServicePayload('climate.room', 21, '1h'), { climate_entity: 'climate.room', temperature: 21, duration: '1h' });
   assert.equal(manualOverrideServicePayload('climate.room', 21, '1h', 0), null);
@@ -69,9 +71,6 @@ test('preset modes are exposed only from advertised native options and localized
   assert.match(formatOverrideExpiry('2026-01-01T12:00:00Z', 'en'), /2026/);
   assert.equal(overrideFocusSelector(true, null), '.slider');
   assert.equal(overrideFocusSelector(false, '0.5'), '[data-delta="0.5"]');
-  const source = readFileSync(new URL('./custom_components/climate_flow_scheduler/www/climate-flow-card.js', import.meta.url), 'utf8');
-  assert.match(source, /set_preset_mode/);
-  assert.match(source, /presetServicePayload\(c\.entity,e,ev\.target\.value\)/);
   assert.match(source, /set_manual_override/);
   assert.match(source, /resume_program/);
   assert.doesNotMatch(source, /globalThis\.prompt|window\.prompt/);
@@ -86,7 +85,7 @@ test('card service wrapper consumes rejections and exposes them for accessible r
   const reported = [];
   card._hass = { callService: async () => { throw new Error('service unavailable'); } };
   card._showServiceError = (error) => reported.push(error.message);
-  await assert.doesNotReject(card._service('climate', 'set_preset_mode', { preset_mode: 'eco' }));
+  await assert.doesNotReject(card._service('climate', 'set_temperature', { temperature: 21 }));
   assert.deepEqual(reported, ['service unavailable']);
 });
 
@@ -103,33 +102,42 @@ test('sameCardConfig compares shallow configs so the editor can skip re-renderin
   assert.equal(sameCardConfig(config, { ...config, extra: 1 }), false);
 });
 
-test('editor builds the form once and never resets the shadow root (static check, no rendering)', () => {
+test('editor builds its sections once and never resets the shadow root (static check, no rendering)', () => {
   const source = readFileSync(new URL('./custom_components/climate_flow_scheduler/www/climate-flow-card.js', import.meta.url), 'utf8');
   const start = source.indexOf('export class ClimateFlowCardEditor');
   const end = source.indexOf('export class ClimateFlowCard extends');
   assert.ok(start !== -1 && end !== -1 && start < end);
   const editor = source.slice(start, end);
   assert.doesNotMatch(editor, /shadowRoot\.innerHTML\s*=/);
-  assert.match(editor, /if \(this\._form\) this\._form\.hass = value;/);
-  assert.match(editor, /this\.shadowRoot\.append\(form, previewBox\)/);
-  assert.match(editor, /if \(!sameCardConfig\(this\._formData, this\._config\)\)/);
+  // hass ticks reach the live controls and preview without rebuilding the DOM.
+  assert.match(editor, /if \(this\._entityPicker\) this\._entityPicker\.hass = value;/);
+  assert.match(editor, /this\.shadowRoot\.append\(style, panel, previewBox\)/);
+  // A field edit compares the merged config before dispatching config-changed.
+  assert.match(editor, /if \(sameCardConfig\(this\._config, next\)\) return;/);
+  // The dialog opens wide (large/full) while the editor is mounted.
+  assert.match(editor, /_widenDialog/);
+  assert.match(editor, /hui-dialog-edit-card/);
 });
 
-test('editor serves grouped forms with helpers and an inert live preview', () => {
+test('editor renders localized sections with help text and an inert live preview', () => {
   const source = readFileSync(new URL('./custom_components/climate_flow_scheduler/www/climate-flow-card.js', import.meta.url), 'utf8');
   const start = source.indexOf('export class ClimateFlowCardEditor');
   const end = source.indexOf('export class ClimateFlowCard extends');
   const editor = source.slice(start, end);
-  // hui-form covers grouped schemas; ha-form stays as the standalone fallback.
-  assert.match(editor, /customElements\?\.get\?\.\('hui-form'\) \? 'hui-form' : 'ha-form'/);
-  // Localized section names win over field names in the label callback.
-  assert.match(editor, /this\._strings\(\)\.sections\[schema\.name\] \|\| fieldLabel/);
-  assert.match(editor, /form\.computeHelper = \(schema\) => this\._strings\(\)\.help\[schema\.name\]/);
+  // Section titles come from the localized sections map, fields from fieldLabel.
+  assert.match(editor, /strings\.sections\[section\.name\] \|\| section\.name/);
+  assert.match(editor, /fieldLabel\(strings, name\)/);
+  assert.match(editor, /strings\.help\[name\] \|\| ''/);
+  // Switch rows are role=switch inputs bound to boolean config keys.
+  assert.match(editor, /input\.type = 'checkbox'/);
+  assert.match(editor, /setAttribute\('role', 'switch'\)/);
   // The preview is a real card fed with the edited config, but inert:
   // clicks must never call services while the user is only configuring.
-  assert.match(editor, /\.preview\{pointer-events:none\}/);
+  assert.match(source, /\.preview\{pointer-events:none\}/);
   assert.match(editor, /document\.createElement\('climate-flow-card'\)/);
   assert.match(editor, /this\._preview\.hass = value;/);
+  // A null or empty step is stripped before it can reach the card.
+  assert.match(editor, /delete merged\.step/);
 });
 
 test('entity suggestion targets climate entities only and wraps the card config', () => {
@@ -233,6 +241,57 @@ test('an explicitly configured step still overrides the entity step after the pr
   assert.equal(effectiveStep({ attributes: { target_temp_step: 0.5 } }, explicitStepCard.config.step, explicitStepCard._stepOverride), 1);
   assert.throws(() => configuredCard({ ...defaultCardConfig('climate.living_room'), step: 0 }), /step must be a number greater than zero/);
   assert.throws(() => configuredCard({ ...defaultCardConfig('climate.living_room'), step: 'bad' }), /step must be a number greater than zero/);
+});
+
+test('an empty step from the editor follows the entity instead of breaking the card', () => {
+  // The editor's step box is cleared to ''/null; treating that as an invalid
+  // override made setConfig throw, so every toggle in the card editor failed.
+  for (const step of ['', '   ', null, undefined]) {
+    const card = configuredCard({ ...defaultCardConfig('climate.living_room'), step });
+    assert.equal(card._stepOverride, null);
+    assert.equal(card.config.step, 0.5);
+  }
+  // The entity step still wins at runtime for an emptied box.
+  const card = configuredCard({ ...defaultCardConfig('climate.living_room'), step: '' });
+  assert.equal(effectiveStep({ attributes: { target_temp_step: 1 } }, card.config.step, card._stepOverride), 1);
+  // A real number keeps overriding, so only the empty case was relaxed.
+  assert.equal(configuredCard({ ...defaultCardConfig('climate.living_room'), step: '0.5' })._stepOverride, 0.5);
+});
+
+test('control toggles gate +/- buttons and the HVAC select in both layouts', () => {
+  const source = readFileSync(new URL('./custom_components/climate_flow_scheduler/www/climate-flow-card.js', import.meta.url), 'utf8');
+  const pill = source.slice(source.indexOf('_renderPill() {'), source.indexOf('_renderCompact() {'));
+  const compact = source.slice(source.indexOf('_renderCompact() {'), source.indexOf('_scheduleSensor() {'));
+  // Pill: the mode select is rendered only when show_mode_buttons is on (it
+  // used to be missing entirely), and the +/- pair honors show_step_controls.
+  assert.match(pill, /if \(c\.show_step_controls && adjustable\) \{ const minus/);
+  assert.match(pill, /if \(c\.show_mode_buttons && modeList\.length\) \{ const select/);
+  // Compact: same gates around the slider buttons and the hvac-mode select.
+  assert.match(compact, /if \(c\.show_step_controls\) for \(const \[d,label,text\]/);
+  assert.match(compact, /if \(c\.show_mode_buttons && modeList\.length\)/);
+});
+
+test('editor widening toggles the HA edit dialog large flag and restores it', () => {
+  const editor = new ClimateFlowCardEditor();
+  const dialog = { large: false };
+  editor._findEditDialog = () => dialog;
+  editor.connectedCallback();
+  assert.equal(dialog.large, true);
+  editor.disconnectedCallback();
+  assert.equal(dialog.large, false);
+  // A dialog the user already enlarged stays enlarged on close.
+  const own = { large: true };
+  const editor2 = new ClimateFlowCardEditor();
+  editor2._findEditDialog = () => own;
+  editor2.connectedCallback();
+  assert.equal(own.large, true);
+  editor2.disconnectedCallback();
+  assert.equal(own.large, true);
+  // A missing dialog (editor outside the HA dialog) is a harmless no-op.
+  const editor3 = new ClimateFlowCardEditor();
+  editor3._findEditDialog = () => null;
+  editor3.connectedCallback();
+  editor3.disconnectedCallback();
 });
 
 test('heat_cool model and payload use dual targets and preserve their gap', () => {

@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.2.0
+
+- New brand icon: the thermometer placeholder is replaced by a thermometer inside a schedule loop on the teal brand gradient, shipped as `brand/icon.png` (256px) plus a new `brand/icon@2x.png` (512px) for high-resolution displays.
+- The preset selector (none/hold/program) is removed from both card layouts and from the card editor configuration.
+- The "Controls and steps" toggles now work as expected in both layouts: `show_step_controls` gates the +/- buttons (pill included) and `show_mode_buttons` now also shows the HVAC mode selector in the pill layout.
+- An empty step value in the editor no longer breaks the card: a cleared step box means "follow the entity's own step" instead of an invalid override that failed `setConfig`.
+- The card editor is redesigned like Bubble Card: a wide dialog (the HA edit dialog is opened in its large/full mode while the editor is mounted) with labeled sections (Identity, Chips, Controls), switch rows, segmented choices, help text, and a live inert preview of the card.
+
 ## v1.1.0
 
 - Add a vacation pause: the new `set_pause` service holds one validated target for 1, 3, 7, 14, or 30 days and the weekly program resumes automatically when the pause expires. Pauses persist across restarts (storage schema v3, migrated from v2 without touching programs or overrides) and are cleared when a program is replaced, disabled, or deleted.
