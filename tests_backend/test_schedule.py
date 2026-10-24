@@ -38,6 +38,12 @@ migrate_storage_data = schedule.migrate_storage_data
 DATA_MIGRATIONS = schedule.DATA_MIGRATIONS
 structured_error = schedule.structured_error
 error_entry = schedule.error_entry
+pause_expiry = schedule.pause_expiry
+normalize_pause = schedule.normalize_pause
+pause_is_active = schedule.pause_is_active
+effective_target = schedule.effective_target
+PAUSE_TARGET = schedule.PAUSE_TARGET
+PAUSE_DURATIONS = schedule.PAUSE_DURATIONS
 ROOT = Path(__file__).parents[1]
 
 
@@ -379,6 +385,69 @@ class ManualOverrideRuntimeTests(unittest.TestCase):
         self.assertIsNone(normalize_manual_override({**persisted, "target": True}))
 
 
+class PauseTests(unittest.TestCase):
+    """Vacation pause: expiry, persisted shape, and target precedence."""
+
+    def now(self):
+        # Monday, inside the 11:00-13:00 slot used below.
+        return datetime(2026, 1, 5, 12, 0, tzinfo=timezone.utc)
+
+    def test_pause_expiry_durations(self):
+        now = self.now()
+        for duration, days in (("1d", 1), ("3d", 3), ("7d", 7), ("14d", 14), ("30d", 30)):
+            self.assertEqual(pause_expiry(now, duration), now + timedelta(days=days))
+        for bad in (None, "", "2d", "1h", 3, ["1d"]):
+            with self.subTest(bad=bad), self.assertRaises(ScheduleError) as catch:
+                pause_expiry(now, bad)
+            self.assertEqual(catch.exception.code, "invalid_pause_duration")
+        naive = datetime(2026, 1, 5, 12, 0)
+        self.assertEqual(pause_expiry(naive, "1d"), naive + timedelta(days=1))
+
+    def test_normalize_pause_rejects_naive_or_malformed(self):
+        self.assertEqual(
+            normalize_pause({"target": 16, "until": "2026-01-06T12:00:00+00:00"}),
+            {"target": 16.0, "until": "2026-01-06T12:00:00+00:00"},
+        )
+        self.assertEqual(
+            normalize_pause({"target": 16, "until": datetime(2026, 1, 6, 12, tzinfo=timezone.utc)}),
+            {"target": 16.0, "until": "2026-01-06T12:00:00+00:00"},
+        )
+        for bad in (
+            None, [], {}, {"target": 16, "until": "2026-01-06T12:00:00"},
+            {"target": "16", "until": "2026-01-06T12:00:00+00:00"},
+            {"target": 16}, {"target": 16, "until": "2026-01-06T12:00:00+00:00", "extra": 1},
+            {"target": float("nan"), "until": "2026-01-06T12:00:00+00:00"},
+        ):
+            with self.subTest(bad=bad):
+                self.assertIsNone(normalize_pause(bad))
+
+    def test_pause_is_active_until_the_expiry(self):
+        pause = {"target": 16.0, "until": "2026-01-06T12:00:00+00:00"}
+        self.assertTrue(pause_is_active(pause, self.now()))
+        self.assertFalse(pause_is_active(pause, datetime(2026, 1, 6, 12, 0, tzinfo=timezone.utc)))
+        self.assertFalse(pause_is_active(pause, datetime(2026, 1, 7, 12, 0, tzinfo=timezone.utc)))
+        for bad in (None, {}, {"until": "nope"}, {"until": "2026-01-06T12:00:00"}, {"until": 5}):
+            self.assertFalse(pause_is_active(bad, self.now()))
+
+    def test_effective_target_prefers_override_then_pause_then_program(self):
+        now = self.now()
+        program = validate_program([slot("a", days=[1], start="11:00", end="13:00", temperature=21)], True, 17)
+        pause = {"target": 16.0, "until": (now + timedelta(days=2)).isoformat()}
+        override = {"target": 23.0, "expires_at": (now + timedelta(hours=1)).isoformat()}
+        self.assertEqual(effective_target(program, None, None, now), ("a", 21.0))
+        self.assertEqual(effective_target(program, None, pause, now), (PAUSE_TARGET, 16.0))
+        self.assertEqual(effective_target(program, override, pause, now), ("__manual_override__", 23.0))
+        expired_pause = {"target": 16.0, "until": (now - timedelta(minutes=1)).isoformat()}
+        self.assertEqual(effective_target(program, None, expired_pause, now), ("a", 21.0))
+        expired_override = {"target": 23.0, "expires_at": (now - timedelta(minutes=1)).isoformat()}
+        self.assertEqual(effective_target(program, expired_override, pause, now), (PAUSE_TARGET, 16.0))
+        self.assertEqual(effective_target(program, None, None, now.replace(hour=20)), (AWAY_TARGET, 17.0))
+
+    def test_apply_key_distinguishes_pause_targets(self):
+        self.assertNotEqual(program_apply_key("heat", PAUSE_TARGET, 16.0), program_apply_key("heat", PAUSE_TARGET, 18.0))
+        self.assertNotEqual(program_apply_key("heat", PAUSE_TARGET, 16.0), program_apply_key("heat", "a", 16.0))
+
+
 class StorageMigrationTests(unittest.TestCase):
     """Migrate-or-discard contract for the scheduler storage payload."""
 
@@ -393,6 +462,21 @@ class StorageMigrationTests(unittest.TestCase):
 
     def test_newer_payload_cannot_be_downgraded(self):
         self.assertIsNone(migrate_storage_data({"schema_version": 3}, 3, 2))
+
+    def test_registered_v2_to_v3_migration_initializes_pauses(self):
+        programs = {"climate.x": {"slots": []}}
+        overrides = {"climate.x": {"target": 21.0, "expires_at": "2026-01-06T12:00:00+00:00"}}
+        migrated = migrate_storage_data(
+            {"schema_version": 2, "programs": programs, "overrides": overrides}, 2, 3
+        )
+        self.assertEqual(migrated["programs"], programs)
+        self.assertEqual(migrated["overrides"], overrides)
+        self.assertEqual(migrated["pauses"], {})
+        self.assertEqual(migrated["schema_version"], 3)
+        # A payload that already carries pauses keeps them untouched.
+        pauses = {"climate.x": {"target": 16.0, "until": "2026-01-06T12:00:00+00:00"}}
+        kept = migrate_storage_data({"schema_version": 2, "pauses": pauses, "programs": {}}, 2, 3)
+        self.assertEqual(kept["pauses"], pauses)
 
     def test_registered_v1_to_v2_migration_preserves_programs_and_initializes_overrides(self):
         programs = {"climate.x": {"slots": []}}

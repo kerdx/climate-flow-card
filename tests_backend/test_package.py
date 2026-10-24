@@ -46,8 +46,13 @@ class PackageTests(unittest.TestCase):
         services = ROOT / "custom_components/climate_flow_scheduler/services.yaml"
         self.assertTrue(services.is_file())
         text = services.read_text(encoding="utf-8")
-        for service in ("save_program", "set_enabled", "delete_program"):
+        for service in ("save_program", "set_enabled", "delete_program", "set_manual_override", "set_pause", "resume_program"):
             self.assertIn(f"{service}:", text)
+        # The vacation pause fields are documented with their service schema.
+        for field in ("temperature", "duration"):
+            self.assertIn(field, text)
+        for duration in ("1d", "3d", "7d", "14d", "30d"):
+            self.assertIn(f'"{duration}"', text)
 
     def test_card_source_has_no_duplicate_copies(self):
         """Guard against reintroducing a second copy of the card source.
@@ -78,7 +83,7 @@ class PackageTests(unittest.TestCase):
         integration = (ROOT / "custom_components/climate_flow_scheduler/__init__.py").read_text(encoding="utf-8")
         schedule = (ROOT / "custom_components/climate_flow_scheduler/schedule.py").read_text(encoding="utf-8")
         self.assertIn("STORE_VERSION = 1", const)
-        self.assertIn("STORAGE_VERSION = 2", const)
+        self.assertIn("STORAGE_VERSION = 3", const)
         self.assertIn("Store(hass, STORE_VERSION, STORAGE_KEY)", integration)
         self.assertIn("CONFIG_ENTRY_VERSION = 1", const)
         self.assertIn("VERSION = CONFIG_ENTRY_VERSION", flow)
@@ -91,6 +96,12 @@ class PackageTests(unittest.TestCase):
         # Stored payloads must migrate or fail loudly, never silently vanish.
         self.assertIn("def migrate_storage_data", schedule)
         self.assertIn("migrate_storage_data(stored, stored_version, STORAGE_VERSION)", integration)
+        # Every previous version needs a registered step up to the current one.
+        self.assertIn("DATA_MIGRATIONS[1] = _migrate_v1_to_v2", schedule)
+        self.assertIn("DATA_MIGRATIONS[2] = _migrate_v2_to_v3", schedule)
+        # The vacation pause is persisted next to the overrides.
+        self.assertIn('"pauses": self.pauses', integration)
+        self.assertIn('"set_pause"', integration)
 
     def test_manifest_version_matches_changelog(self):
         """The manifest version must match the newest CHANGELOG section."""
@@ -124,6 +135,7 @@ class PackageTests(unittest.TestCase):
             "climate_range_invalid", "target_outside_limits", "target_off_step",
             "heat_cool_unsupported",
             "invalid_override_duration", "no_next_change", "override_hvac_off", "invalid_override_step",
+            "invalid_pause_duration", "pause_hvac_off",
         }
         exceptions = {}
         for language in ("en", "it"):
@@ -156,8 +168,15 @@ class PackageTests(unittest.TestCase):
         integration = (ROOT / "custom_components/climate_flow_scheduler/__init__.py").read_text(encoding="utf-8")
         self.assertIn('FRONTEND_URL = "/climate_flow_scheduler/climate-flow-card.js"', const)
         self.assertIn('StaticPathConfig("/climate_flow_scheduler", str(www_path)', integration)
-        self.assertIn("add_extra_js_url(hass, FRONTEND_URL)", integration)
-        self.assertIn("remove_extra_js_url(hass, FRONTEND_URL)", integration)
+        # The dashboard resource is loaded as soon as the integration is set
+        # up, so it must be registered in async_setup: async_setup_entry can
+        # fail or abort after the scheduler/sensor/service wiring, which would
+        # leave the card missing from the picker without an obvious cause.
+        setup_body = integration.split("async def async_setup_entry", 1)[0]
+        self.assertIn("add_extra_js_url(hass, FRONTEND_URL)", setup_body)
+        # A config entry reload does not re-run async_setup, so removing the
+        # URL on unload would hide the card until the next HA restart.
+        self.assertNotIn("remove_extra_js_url", integration)
         self.assertTrue((ROOT / "custom_components/climate_flow_scheduler/www/climate-flow-card.js").is_file())
 
     # Canonical cv helpers that produce an integration CONFIG_SCHEMA, as listed

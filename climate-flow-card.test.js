@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { ClimateFlowCard, ClimateFlowCardEditor, CLIMATE_FLOW_CARD_TAG, CLIMATE_FLOW_CARD_EDITOR_TAG, registerClimateFlowElements, isClimateFlowElementsRegistered, isHomeAssistantFrontendReady, scheduleClimateFlowReregistration, clampTarget, temperaturePayload, targetModel, hvacToggleMode, scheduleDraft, validateScheduleDraft, defaultCardConfig, configSchema, configSchemaFields, getEntitySuggestion, sameCardConfig, errorLabel, effectiveStep, normalizeLayout, isClimateActive, isScheduleEnabled, awayTemperaturePayload, schedulableModes, presetModes, presetServicePayload, manualOverrideServicePayload, overrideDurationChoices, formatOverrideExpiry, overrideFocusSelector, climateStatusKey, statusLabel, modeLabel, resolveLanguage, cardStrings, fieldLabel, pickEntityTimestamp, formatRelativeTime, formatNumber, pillStatusParts, currentTemperatureDisplay } from './custom_components/climate_flow_scheduler/www/climate-flow-card.js';
+import { ClimateFlowCard, ClimateFlowCardEditor, CLIMATE_FLOW_CARD_TAG, CLIMATE_FLOW_CARD_EDITOR_TAG, registerClimateFlowElements, isClimateFlowElementsRegistered, isHomeAssistantFrontendReady, scheduleClimateFlowReregistration, clampTarget, temperaturePayload, targetModel, hvacToggleMode, scheduleDraft, validateScheduleDraft, defaultCardConfig, configSchema, configSchemaFields, getEntitySuggestion, sameCardConfig, errorLabel, effectiveStep, normalizeLayout, isClimateActive, isScheduleEnabled, awayTemperaturePayload, schedulableModes, presetModes, presetServicePayload, manualOverrideServicePayload, overrideDurationChoices, formatOverrideExpiry, overrideFocusSelector,
+  pauseServicePayload, pauseDurationChoices, activePause, PAUSE_DURATIONS, climateStatusKey, statusLabel, modeLabel, resolveLanguage, cardStrings, fieldLabel, pickEntityTimestamp, formatRelativeTime, formatNumber, pillStatusParts, currentTemperatureDisplay } from './custom_components/climate_flow_scheduler/www/climate-flow-card.js';
 
 test('module imports without browser DOM and exports the card class', () => {
   assert.equal(typeof ClimateFlowCard, 'function');
@@ -131,9 +132,10 @@ test('editor serves grouped forms with helpers and an inert live preview', () =>
   assert.match(editor, /this\._preview\.hass = value;/);
 });
 
-test('entity suggestion targets climate entities only and includes card type and defaults', () => {
+test('entity suggestion targets climate entities only and wraps the card config', () => {
+  // Home Assistant reads suggestion.config, so the suggestion must nest it.
   assert.deepEqual(getEntitySuggestion({}, 'climate.living_room'), {
-    type: 'custom:climate-flow-card', ...defaultCardConfig('climate.living_room'),
+    config: { type: 'custom:climate-flow-card', ...defaultCardConfig('climate.living_room') },
   });
   assert.equal(getEntitySuggestion({}, 'light.living_room'), null);
   assert.deepEqual(ClimateFlowCard.getStubConfig({ states: {} }), defaultCardConfig('climate.example'));
@@ -200,7 +202,7 @@ const configuredCard = (config) => {
 test('new card presets carry no explicit step, so the entity step stays effective', () => {
   // The preset is not an override: an absent `step` key keeps target_temp_step
   // in charge and leaves 0.5 as the runtime fallback only.
-  for (const preset of [defaultCardConfig('climate.living_room'), ClimateFlowCard.getStubConfig({ states: {} }), getEntitySuggestion({}, 'climate.living_room')]) {
+  for (const preset of [defaultCardConfig('climate.living_room'), ClimateFlowCard.getStubConfig({ states: {} }), getEntitySuggestion({}, 'climate.living_room').config]) {
     assert.equal(Object.hasOwn(preset, 'step'), false);
     assert.equal(preset.step, undefined);
   }
@@ -214,7 +216,7 @@ test('new card presets carry no explicit step, so the entity step stays effectiv
     temperaturePayload({ state: 'heat', attributes: { min_temp: 10, max_temp: 30, temperature: 21, target_temp_step: 1 } }, 21, stubCard.config.step, stubCard._stepOverride),
     { temperature: 21 },
   );
-  const suggestedCard = configuredCard(getEntitySuggestion({}, 'climate.living_room'));
+  const suggestedCard = configuredCard(getEntitySuggestion({}, 'climate.living_room').config);
   assert.equal(suggestedCard._stepOverride, null);
   assert.equal(effectiveStep({ attributes: { target_temp_step: 1 } }, suggestedCard.config.step, suggestedCard._stepOverride), 1);
 });
@@ -294,7 +296,7 @@ test('pill and compact are the only supported layouts', () => {
   assert.equal(normalizeLayout('tall'), null);
   assert.equal(defaultCardConfig('climate.living_room').layout, 'pill');
   assert.equal(ClimateFlowCard.getStubConfig({ states: {} }).layout, 'pill');
-  assert.equal(getEntitySuggestion({}, 'climate.living_room').layout, 'pill');
+  assert.equal(getEntitySuggestion({}, 'climate.living_room').config.layout, 'pill');
 });
 
 test('program HVAC mode is validated and filtered to schedulable modes', () => {
@@ -479,9 +481,12 @@ test('relative time falls back to short English without locale or Intl', (t) => 
 });
 
 test('pill numbers localize with hass locale while compact keeps raw output', (t) => {
-  assert.equal(formatNumber(20.5), '20.5');
-  assert.equal(formatNumber(20), '20');
-  assert.equal(formatNumber('20.5'), '20.5');
+  // Without a locale the helper follows the system default locale, so the
+  // expectation must be derived rather than hardcoded as '20.5' (a machine
+  // with an Italian default would render '20,5').
+  assert.equal(formatNumber(20.5), new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 }).format(20.5));
+  assert.equal(formatNumber(20), new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 }).format(20));
+  assert.equal(formatNumber('20.5'), new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 }).format(20.5));
   assert.equal(formatNumber(null), '');
   assert.equal(formatNumber('unknown'), '');
   const RealNf = globalThis.Intl.NumberFormat;
@@ -628,6 +633,12 @@ test('card registration is idempotent in the same registry', (t) => {
   assert.equal(registry.get(CLIMATE_FLOW_CARD_EDITOR_TAG), ClimateFlowCardEditor);
   assert.equal(isClimateFlowElementsRegistered(), true);
   assert.equal(win.customCards.filter((card) => card?.type === 'climate-flow-card').length, 1);
+  const [entry] = win.customCards.filter((card) => card?.type === 'climate-flow-card');
+  assert.equal(entry.preview, true);
+  assert.equal(entry.documentationURL, 'https://github.com/kerdx/climate-flow-card');
+  assert.deepEqual(entry.getEntitySuggestion({}, 'climate.living_room'), {
+    config: { type: 'custom:climate-flow-card', ...defaultCardConfig('climate.living_room') },
+  });
 });
 
 test('window.customCards entry is preserved without customElements', (t) => {
@@ -1016,5 +1027,36 @@ test('card surfaces route backend errors through errorLabel for translation', ()
   for (const code of ['entity_unavailable', 'service_call_failed', 'slots_overlap', 'target_outside_limits', 'no_program', 'unsupported_hvac_mode']) {
     const occurrences = source.split(` ${code}: `).length - 1;
     assert.ok(occurrences >= 2, `code ${code} must be localized in both languages`);
+  }
+});
+
+test('vacation pause payloads, durations, and active state', () => {
+  assert.deepEqual(PAUSE_DURATIONS, ['1d', '3d', '7d', '14d', '30d']);
+  assert.deepEqual(pauseServicePayload('climate.room', 16, '7d'), { climate_entity: 'climate.room', temperature: 16, duration: '7d' });
+  assert.deepEqual(pauseServicePayload('climate.room', '16.5', '1d'), { climate_entity: 'climate.room', temperature: 16.5, duration: '1d' });
+  assert.equal(pauseServicePayload('climate.room', '', '1d'), null);
+  assert.equal(pauseServicePayload('climate.room', 'warm', '1d'), null);
+  assert.equal(pauseServicePayload('climate.room', 16, '2d'), null);
+  assert.equal(pauseServicePayload('climate.room', 16, '1h'), null);
+  for (const language of ['en', 'it']) {
+    const strings = cardStrings(language);
+    assert.ok(strings.pause && strings.pauseStart && strings.pauseInvalid && strings.pauseActive('18:00'));
+    assert.deepEqual(pauseDurationChoices(strings).map(([value]) => value), PAUSE_DURATIONS);
+    assert.ok(pauseDurationChoices(strings).every(([, label]) => typeof label === 'string' && label.length > 0));
+  }
+  assert.equal(pauseDurationChoices({}).length, PAUSE_DURATIONS.length);
+  const now = Date.parse('2026-01-05T12:00:00Z');
+  assert.equal(activePause({ target: 16, until: '2026-01-06T12:00:00Z' }, now).target, 16);
+  assert.equal(activePause({ target: 16, until: '2026-01-05T11:59:00Z' }, now), null);
+  assert.equal(activePause({ target: 16, until: 'not a date' }, now), null);
+  assert.equal(activePause({ target: 16 }, now), null);
+  assert.equal(activePause(null, now), null);
+  const source = readFileSync(new URL('./custom_components/climate_flow_scheduler/www/climate-flow-card.js', import.meta.url), 'utf8');
+  assert.match(source, /set_pause/);
+  assert.match(source, /pauseServicePayload\(this\.config\.entity, pauseInput\.value, pauseDuration\.value\)/);
+  // The pause must be visible in both layouts, like the manual override.
+  assert.equal((source.match(/pauseActive\(formatOverrideExpiry\(/g) || []).length, 3, 'pause badge in both layouts plus the schedule dialog');
+  for (const code of ['invalid_pause_duration', 'pause_hvac_off']) {
+    assert.equal(source.split(` ${code}: `).length - 1, 2, `code ${code} must be localized in both languages`);
   }
 });

@@ -1,5 +1,20 @@
 # Changelog
 
+## v1.1.0
+
+- Add a vacation pause: the new `set_pause` service holds one validated target for 1, 3, 7, 14, or 30 days and the weekly program resumes automatically when the pause expires. Pauses persist across restarts (storage schema v3, migrated from v2 without touching programs or overrides) and are cleared when a program is replaced, disabled, or deleted.
+- Target precedence is now explicit and tested: an unexpired manual override wins over the pause, the pause wins over the program, and an expired pause or override falls through to the weekly schedule.
+- The card shows the active pause as a badge with a resume action in both layouts, and its schedule dialog gains a pause section (target, length, start) that replaces the controls with the pause expiry while a pause is active.
+- `resume_program` (and the card's resume action) now clears the pause together with the manual override; the diagnostic sensor reports the pause as `pause: {target, until}`.
+- New error codes `invalid_pause_duration` and `pause_hvac_off` are translated in English and Italian.
+
+## v1.0.1
+
+- Register the card frontend resource in `async_setup` instead of at the end of `async_setup_entry`: the card is now loaded as soon as the integration is set up and no longer disappears when a config entry is reloaded (a reload does not re-run `async_setup`, so the previous `remove_extra_js_url` on unload hid the card until the next Home Assistant restart).
+- `getEntitySuggestion` now returns the documented Home Assistant shape (`{ config }`) instead of a bare card configuration, and the card-picker entry advertises `preview: true` plus its `documentationURL`.
+- Card tests no longer depend on the machine locale for the default-locale number formatting check (an Italian-default machine rendered `20,5` and failed the suite).
+- README: troubleshooting steps for a card that does not show up in the picker (integration must be added, then reload the browser page so the frontend index includes the newly registered module).
+
 ## v1.0.0
 
 - Breaking rebrand: renamed integration domain, directory, services and storage key to `climate_flow_scheduler`; existing config entries, service calls and schedules are not migrated.

@@ -92,6 +92,12 @@
     "override_hvac_off": {
       "message": "Gli override manuali non sono disponibili quando il programma imposta HVAC su spento."
     },
+    "invalid_pause_duration": {
+      "message": "Scegli una durata di pausa valida."
+    },
+    "pause_hvac_off": {
+      "message": "La pausa vacanza non è disponibile quando il programma imposta HVAC su spento."
+    },
     "invalid_override_step": {
       "message": "Il passo dell’override deve essere un numero finito positivo."
     }

@@ -23,6 +23,17 @@ const STRINGS = {
     targetLabel: 'Target temperature',
     overrideActive: (expiry) => `Manual override until ${expiry}`,
     resumeSchedule: 'Resume schedule now',
+    pause: 'Vacation pause',
+    pauseActive: (until) => `Vacation pause until ${until}`,
+    pauseTarget: 'Pause target',
+    pauseDuration: 'Pause length',
+    pauseStart: 'Start pause',
+    pauseInvalid: 'The pause target must be a number.',
+    pause1d: '1 day',
+    pause3d: '3 days',
+    pause7d: '7 days',
+    pause14d: '14 days',
+    pause30d: '30 days',
     presets: 'Preset mode',
     presetNone: 'Select preset',
     overrideError: (message) => `Could not apply override: ${message}`,
@@ -79,6 +90,8 @@ const STRINGS = {
       invalid_override_duration: 'Choose a valid override duration.',
       no_next_change: 'There is no upcoming schedule boundary.',
       override_hvac_off: 'Manual overrides are unavailable when the program sets HVAC off.',
+      invalid_pause_duration: 'Choose a valid pause length.',
+      pause_hvac_off: 'A vacation pause is unavailable when the program sets HVAC off.',
       invalid_override_step: 'The override step must be a finite positive number.',
       invalid_time: 'Times must use the HH:MM 24-hour format.',
       invalid_temperature: 'Temperatures must be finite numbers.',
@@ -145,6 +158,17 @@ const STRINGS = {
     targetLabel: 'Temperatura target',
     overrideActive: (expiry) => `Override manuale fino alle ${expiry}`,
     resumeSchedule: 'Riprendi subito la pianificazione',
+    pause: 'Pausa vacanza',
+    pauseActive: (until) => `Pausa vacanza fino al ${until}`,
+    pauseTarget: 'Target della pausa',
+    pauseDuration: 'Durata della pausa',
+    pauseStart: 'Avvia pausa',
+    pauseInvalid: 'Il target della pausa deve essere un numero.',
+    pause1d: '1 giorno',
+    pause3d: '3 giorni',
+    pause7d: '7 giorni',
+    pause14d: '14 giorni',
+    pause30d: '30 giorni',
     presets: 'Preset',
     presetNone: 'Seleziona preset',
     overrideError: (message) => `Impossibile applicare l’override: ${message}`,
@@ -198,6 +222,8 @@ const STRINGS = {
       invalid_override_duration: 'Scegli una durata di override valida.',
       no_next_change: 'Non è presente un prossimo confine della pianificazione.',
       override_hvac_off: 'Gli override manuali non sono disponibili quando il programma imposta HVAC su spento.',
+      invalid_pause_duration: 'Scegli una durata di pausa valida.',
+      pause_hvac_off: 'La pausa vacanza non è disponibile quando il programma imposta HVAC su spento.',
       invalid_override_step: 'Il passo dell’override deve essere un numero finito positivo.',
       invalid_time: 'Gli orari devono usare il formato 24 ore HH:MM.',
       invalid_temperature: 'Le temperature devono essere numeri finiti.',
@@ -470,6 +496,23 @@ export const formatOverrideExpiry = (expiry, locale) => {
   return Number.isNaN(date.getTime()) ? String(expiry ?? '') : date.toLocaleString(locale);
 };
 export const overrideFocusSelector = (slider, delta) => slider ? '.slider' : delta !== null ? `[data-delta="${delta}"]` : '.setpoint, .target, button, input, select';
+// Vacation pause: the backend holds one target for a number of days, then the
+// weekly program resumes on its own. Durations mirror the service schema.
+export const PAUSE_DURATIONS = ['1d', '3d', '7d', '14d', '30d'];
+export const pauseServicePayload = (entityId, temperature, duration) => {
+  const target = typeof temperature === 'number' ? temperature : numeric(temperature);
+  if (target === null || !PAUSE_DURATIONS.includes(duration)) return null;
+  return { climate_entity: entityId, temperature: target, duration };
+};
+export const pauseDurationChoices = (strings) => PAUSE_DURATIONS.map((value) => [value, strings?.[`pause${value}`] ?? value]);
+export const activePause = (pause, nowMs = Date.now()) => {
+  // The diagnostic sensor keeps an expired pause until the next evaluation;
+  // only an unexpired one may be shown as active.
+  if (!pause || typeof pause !== 'object') return null;
+  const until = typeof pause.until === 'string' ? Date.parse(pause.until) : NaN;
+  const now = typeof nowMs === 'number' && Number.isFinite(nowMs) ? nowMs : Date.now();
+  return Number.isFinite(until) && until > now ? pause : null;
+};
 export const schedulableModes = (entity) => {
   const available = modes(entity);
   const supported = available.length ? available : SCHEDULABLE_MODES;
@@ -486,8 +529,10 @@ export const defaultCardConfig = (entity = 'climate.example') => ({
   show_state_chip: true, show_current_temperature_chip: true, show_humidity_chip: false,
   show_unavailable_badge: true, show_mode_buttons: true, show_step_controls: true, show_schedule_button: true, show_preset_modes: true,
 });
+// Home Assistant expects a suggestion object ({ config }), not a bare card
+// configuration: the card picker reads suggestion.config.
 export const getEntitySuggestion = (_hass, entityId) => typeof entityId === 'string' && entityId.startsWith('climate.')
-  ? { type: 'custom:climate-flow-card', ...defaultCardConfig(entityId) }
+  ? { config: { type: 'custom:climate-flow-card', ...defaultCardConfig(entityId) } }
   : null;
 
 const field = (name, selector) => ({ name, selector });
@@ -767,8 +812,11 @@ export class ClimateFlowCard extends HTMLElementBase {
       if (c.show_step_controls && adjustable) { const plus = document.createElement('button'); plus.dataset.delta = String(step); plus.setAttribute('aria-label', t.increase); plus.textContent = '+'; controls.append(plus); }
       const presets = c.show_preset_modes === false ? [] : presetModes(e);
       if (presets.length) { const select=document.createElement('select'); select.className='preset-mode'; select.setAttribute('aria-label',t.presets); select.style.maxWidth='92px'; const none=document.createElement('option'); none.value=''; none.textContent=t.presetNone; select.append(none); const active=typeof a.preset_mode==='string'?a.preset_mode:''; for(const value of presets){const option=document.createElement('option');option.value=value;option.textContent=value;select.append(option)} select.value=presets.includes(active)?active:''; controls.append(select); select.addEventListener('change',(ev)=>{const data=presetServicePayload(c.entity,e,ev.target.value);if(data)this._service('climate','set_preset_mode',data)}); }
-      const override = this._scheduleProgram()?.manual_override;
+      const program = this._scheduleProgram();
+      const override = program?.manual_override;
       if (override) { const badge=document.createElement('span'); badge.className='override-badge'; badge.textContent=t.overrideActive(formatOverrideExpiry(override.expires_at,locale)); const status=root.querySelector('.status'); status.hidden=false; status.append(badge); const resume=document.createElement('button'); resume.textContent=t.resumeSchedule; resume.setAttribute('aria-label',t.resumeSchedule); resume.addEventListener('click',()=>this._service('climate_flow_scheduler','resume_program',{climate_entity:c.entity})); controls.append(resume); }
+      const pause = override ? null : activePause(program?.pause);
+      if (pause) { const badge=document.createElement('span'); badge.className='override-badge'; badge.textContent=t.pauseActive(formatOverrideExpiry(pause.until,locale)); const status=root.querySelector('.status'); status.hidden=false; status.append(badge); const resume=document.createElement('button'); resume.textContent=t.resumeSchedule; resume.setAttribute('aria-label',t.resumeSchedule); resume.addEventListener('click',()=>this._service('climate_flow_scheduler','resume_program',{climate_entity:c.entity})); controls.append(resume); }
       if (!controls.children.length) controls.hidden = true;
       setpoint.addEventListener('click', () => {
         if (setpoint.disabled) return;
@@ -847,8 +895,11 @@ export class ClimateFlowCard extends HTMLElementBase {
       if (c.show_mode_buttons && modeList.length) { const select=document.createElement('select'); select.className='hvac-mode'; select.setAttribute('aria-label',t.hvacMode); for(const m of modeList){const option=document.createElement('option');option.value=String(m);option.textContent=modeLabel(m,t);select.append(option)} select.value=modeList.includes(e.state)?e.state:modeList[0]; body.append(select); }
       const presets = c.show_preset_modes === false ? [] : presetModes(e);
       if (presets.length) { const select=document.createElement('select'); select.className='preset-mode'; select.setAttribute('aria-label',t.presets); const none=document.createElement('option'); none.value=''; none.textContent=t.presetNone; select.append(none); const active=typeof a.preset_mode==='string'?a.preset_mode:''; for(const value of presets){const option=document.createElement('option');option.value=value;option.textContent=value;select.append(option)} select.value=presets.includes(active)?active:''; body.append(select); }
-      const override = this._scheduleProgram()?.manual_override;
+      const program = this._scheduleProgram();
+      const override = program?.manual_override;
       if (override) { const badge=document.createElement('span'); badge.className='badge'; badge.textContent=t.overrideActive(formatOverrideExpiry(override.expires_at,this._hass?.locale?.language)); body.append(badge); const resume=document.createElement('button'); resume.textContent=t.resumeSchedule; resume.setAttribute('aria-label',t.resumeSchedule); resume.addEventListener('click',()=>this._service('climate_flow_scheduler','resume_program',{climate_entity:c.entity})); body.append(resume); }
+      const pause = override ? null : activePause(program?.pause);
+      if (pause) { const badge=document.createElement('span'); badge.className='badge'; badge.textContent=t.pauseActive(formatOverrideExpiry(pause.until,this._hass?.locale?.language)); body.append(badge); const resume=document.createElement('button'); resume.textContent=t.resumeSchedule; resume.setAttribute('aria-label',t.resumeSchedule); resume.addEventListener('click',()=>this._service('climate_flow_scheduler','resume_program',{climate_entity:c.entity})); body.append(resume); }
     }
     this.shadowRoot.querySelector('.slider')?.addEventListener('change', (ev) => this._setTemperature(ev.target.value, e));
     root.querySelectorAll('[data-delta]').forEach((b) => b.addEventListener('click', () => this._setTemperature(target + Number(b.dataset.delta), e)));
@@ -946,6 +997,41 @@ export class ClimateFlowCard extends HTMLElementBase {
       if (program?.active_slot_id) { const act = document.createElement('span'); act.textContent = t.active(program.active_slot_id); statusline.append(act); }
       body.append(statusline);
       if (program?.last_error) { const p = document.createElement('p'); p.className = 'error'; p.textContent = errorLabel(t, program.last_error); body.append(p); }
+      // A disabled program has nothing to pause, so the section is hidden
+      // instead of offering an action the backend rejects as no_program.
+      const pauseError = document.createElement('p'); pauseError.className = 'error'; pauseError.setAttribute('role', 'alert'); pauseError.setAttribute('aria-live', 'assertive');
+      const pause = activePause(program?.pause);
+      const pauseBox = document.createElement('div'); pauseBox.className = 'field mode';
+      const pauseLocale = this._hass?.locale?.language;
+      const pauseAvailable = Boolean(program?.enabled);
+      if (pause) {
+        const pausedLabel = document.createElement('label');
+        pausedLabel.textContent = t.pauseActive(formatOverrideExpiry(pause.until, pauseLocale));
+        const resumePause = document.createElement('button'); resumePause.className = 'btn'; resumePause.textContent = t.resumeSchedule;
+        resumePause.addEventListener('click', async () => {
+          pauseError.textContent = '';
+          try { await this._hass.callService('climate_flow_scheduler', 'resume_program', { climate_entity: this.config.entity }); this._closeSchedule(dialog); }
+          catch (err) { pauseError.textContent = errorLabel(t, err?.message || err); }
+        });
+        pauseBox.append(pausedLabel, resumePause);
+      } else {
+        const pauseLabel = document.createElement('label'); pauseLabel.textContent = t.pause;
+        const pauseInput = document.createElement('input'); pauseInput.type = 'number'; pauseInput.step = 'any';
+        pauseInput.setAttribute('aria-label', t.pauseTarget); pauseInput.title = t.pauseTarget;
+        pauseInput.value = String(numeric(entity?.attributes?.temperature) ?? 16);
+        const pauseDuration = document.createElement('select'); pauseDuration.setAttribute('aria-label', t.pauseDuration);
+        for (const [value, label] of pauseDurationChoices(t)) { const option = document.createElement('option'); option.value = value; option.textContent = label; pauseDuration.append(option); }
+        const startPause = document.createElement('button'); startPause.className = 'btn'; startPause.textContent = t.pauseStart;
+        startPause.addEventListener('click', async () => {
+          pauseError.textContent = '';
+          const data = pauseServicePayload(this.config.entity, pauseInput.value, pauseDuration.value);
+          if (!data) { pauseError.textContent = t.pauseInvalid; return; }
+          try { await this._hass.callService('climate_flow_scheduler', 'set_pause', data); this._closeSchedule(dialog); }
+          catch (err) { pauseError.textContent = errorLabel(t, err?.message || err); }
+        });
+        pauseBox.append(pauseLabel, pauseInput, pauseDuration, startPause);
+      }
+      if (pauseAvailable) body.append(pauseBox, pauseError);
       const enabledLabel = document.createElement('label'), enabled = document.createElement('input'); enabled.type = 'checkbox'; enabled.checked = Boolean(this._scheduleDraft.enabled); enabledLabel.className = 'switch'; enabledLabel.append(enabled, document.createTextNode(t.enabled)); enabled.addEventListener('change', () => this._scheduleDraft.enabled = enabled.checked);      body.append(enabledLabel);
       const modeField = document.createElement('div'); modeField.className = 'field mode';
       const modeFieldLabel = document.createElement('label'); modeFieldLabel.textContent = t.hvacMode;
@@ -1095,7 +1181,7 @@ const ensureClimateFlowCardList = () => {
   if (!globalThis.window) return;
   const scope = globalThis.window;
   scope.customCards = scope.customCards || [];
-  if (!scope.customCards.some((card) => card?.type === CLIMATE_FLOW_CARD_TAG)) scope.customCards.push({ type: CLIMATE_FLOW_CARD_TAG, name: 'Climate Flow Card', description: 'Standalone climate card with a weekly schedule', getEntitySuggestion });
+  if (!scope.customCards.some((card) => card?.type === CLIMATE_FLOW_CARD_TAG)) scope.customCards.push({ type: CLIMATE_FLOW_CARD_TAG, name: 'Climate Flow Card', description: 'Standalone climate card with a weekly schedule', preview: true, documentationURL: 'https://github.com/kerdx/climate-flow-card', getEntitySuggestion });
 };
 
 export const isClimateFlowElementsRegistered = () => {

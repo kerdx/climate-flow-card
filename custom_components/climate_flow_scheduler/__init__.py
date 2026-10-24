@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 import voluptuous as vol
-from homeassistant.components.frontend import add_extra_js_url, remove_extra_js_url
+from homeassistant.components.frontend import add_extra_js_url
 from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, ServiceCall, callback
@@ -26,7 +26,6 @@ from .schedule import (
     entity_config_changed,
     validate_program,
     program_status,
-    resolve_target,
     validate_single_target_mode,
     validate_target,
     validate_override_step,
@@ -38,11 +37,14 @@ from .schedule import (
     migrate_storage_data,
     structured_error,
     error_entry,
-    effective_program_target,
     manual_override_expiry,
     program_apply_key,
     clear_manual_override,
     override_is_operational,
+    effective_target,
+    normalize_pause,
+    pause_expiry,
+    pause_is_active,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -82,6 +84,7 @@ class Scheduler:
         self.store = store
         self.programs: dict[str, dict[str, Any]] = {}
         self.overrides: dict[str, dict[str, Any]] = {}
+        self.pauses: dict[str, dict[str, Any]] = {}
         self.errors: dict[str, str | None] = {}
         self.pending: set[str] = set()
         self.applied_slot: dict[str, str | None] = {}
@@ -132,6 +135,12 @@ class Scheduler:
                 normalized = normalize_manual_override(override)
                 if normalized and entity_id in self.programs and self.programs[entity_id]["enabled"]:
                     self.overrides[entity_id] = normalized
+        raw_pauses = stored.get("pauses", {})
+        if isinstance(raw_pauses, dict):
+            for entity_id, pause in raw_pauses.items():
+                normalized = normalize_pause(pause)
+                if normalized and entity_id in self.programs and self.programs[entity_id]["enabled"]:
+                    self.pauses[entity_id] = normalized
 
     async def async_save(self) -> None:
         await self.store.async_save({
@@ -141,6 +150,7 @@ class Scheduler:
                 for entity_id, program in self.programs.items()
             },
             "overrides": self.overrides,
+            "pauses": self.pauses,
         })
         self._update_sensor()
 
@@ -151,7 +161,7 @@ class Scheduler:
     def _snapshot_entity(self, entity_id: str) -> tuple[Any, ...]:
         return snapshot_entity_state(
             entity_id,
-            (self.programs, self.errors, self.applied_slot, self._last_logged_error, self.overrides),
+            (self.programs, self.errors, self.applied_slot, self._last_logged_error, self.overrides, self.pauses),
             (self.pending,),
         )
 
@@ -170,6 +180,7 @@ class Scheduler:
                 "next_change": boundary.isoformat() if boundary else None,
                 "last_error": self.errors.get(entity_id),
                 "manual_override": self.overrides.get(entity_id),
+                "pause": self.pauses.get(entity_id),
             }
         return result
 
@@ -192,7 +203,11 @@ class Scheduler:
                 previous = self.programs.get(entity_id)
                 self.programs[entity_id] = program
                 if not enabled or previous != program:
+                    # A replaced or disabled program invalidates both the
+                    # temporary override and a vacation pause: they were set
+                    # against the schedule being replaced.
                     clear_manual_override(self.overrides, entity_id)
+                    self.pauses.pop(entity_id, None)
                 self.errors[entity_id] = None
                 self.applied_slot.pop(entity_id, None)
                 self._last_logged_error.pop(entity_id, None)
@@ -222,6 +237,7 @@ class Scheduler:
                 self.programs[entity_id]["enabled"] = enabled
                 if not enabled:
                     clear_manual_override(self.overrides, entity_id)
+                    self.pauses.pop(entity_id, None)
                 self.errors[entity_id] = None
                 self.applied_slot.pop(entity_id, None)
                 self._last_logged_error.pop(entity_id, None)
@@ -240,6 +256,7 @@ class Scheduler:
             try:
                 self.programs.pop(entity_id, None)
                 clear_manual_override(self.overrides, entity_id)
+                self.pauses.pop(entity_id, None)
                 self.errors.pop(entity_id, None)
                 self.pending.discard(entity_id)
                 self.applied_slot.pop(entity_id, None)
@@ -269,16 +286,21 @@ class Scheduler:
                 if not program or not program["enabled"]:
                     continue
                 override = self.overrides.get(entity_id)
-                if override:
-                    expiry = dt_util.parse_datetime(override["expires_at"])
-                    if expiry and dt_util.as_utc(now) < dt_util.as_utc(expiry):
-                        target_kind, target = effective_program_target(program, override, now)
-                    else:
-                        clear_manual_override(self.overrides, entity_id)
-                        await self.async_save()
-                        target_kind, target = resolve_target(program["slots"], program.get("away_temperature"), now)
-                else:
-                    target_kind, target = resolve_target(program["slots"], program.get("away_temperature"), now)
+                pause = self.pauses.get(entity_id)
+                # Drop what has expired before resolving, so a stale pause or
+                # override never masks the schedule and the stored copy stays
+                # truthful for the sensor and the card.
+                if override and not override_is_operational(program, override, now):
+                    clear_manual_override(self.overrides, entity_id)
+                    override = None
+                    await self.async_save()
+                if pause and not pause_is_active(pause, now):
+                    self.pauses.pop(entity_id, None)
+                    pause = None
+                    await self.async_save()
+                # Precedence: explicit manual override, then vacation pause,
+                # then the weekly program.
+                target_kind, target = effective_target(program, override, pause, now)
                 mode = program.get("hvac_mode")
                 if target_kind is None and mode is None:
                     self.applied_slot[entity_id] = None
@@ -360,14 +382,48 @@ class Scheduler:
                 raise
         await self.async_evaluate(entity_id)
 
-    async def async_clear_override(self, entity_id: str) -> None:
+    async def async_set_pause(self, entity_id: str, target: Any, duration: Any) -> None:
+        """Hold one target for a fixed number of days, then resume the program."""
         async with self._evaluation_lock:
-            old = clear_manual_override(self.overrides, entity_id)
-            if old is not None:
+            program = self.programs.get(entity_id)
+            if not program or not program["enabled"]:
+                raise ScheduleValidationError("No enabled schedule exists for this climate entity", code="no_program")
+            state = self.hass.states.get(entity_id)
+            try:
+                if program.get("hvac_mode") == "off":
+                    raise ScheduleError("A pause is unavailable when the program sets HVAC off", "pause_hvac_off")
+                if state is None or state.state in ("unavailable", "unknown"):
+                    raise ScheduleError("Climate entity is unavailable", "entity_unavailable")
+                _validate_climate_target(state, [target], program.get("hvac_mode"))
+                now = dt_util.now()
+                until = pause_expiry(now, duration)
+            except (ScheduleError, HomeAssistantError) as err:
+                raise ScheduleValidationError(str(err), code=getattr(err, "code", "entity_validation_failed"), context=getattr(err, "context", {})) from err
+            old_pause, old_override = self.pauses.get(entity_id), self.overrides.get(entity_id)
+            self.pauses[entity_id] = {"target": float(target), "until": until.isoformat()}
+            # A pause replaces a temporary override: both are user targets, and
+            # keeping the override would hide the pause until it expired.
+            clear_manual_override(self.overrides, entity_id)
+            try:
+                await self.async_save()
+            except BaseException:
+                if old_pause is None: self.pauses.pop(entity_id, None)
+                else: self.pauses[entity_id] = old_pause
+                if old_override is not None: self.overrides[entity_id] = old_override
+                raise
+        await self.async_evaluate(entity_id)
+
+    async def async_resume_schedule(self, entity_id: str) -> None:
+        """Clear the manual override and the pause, then evaluate immediately."""
+        async with self._evaluation_lock:
+            old_override = clear_manual_override(self.overrides, entity_id)
+            old_pause = self.pauses.pop(entity_id, None)
+            if old_override is not None or old_pause is not None:
                 try:
                     await self.async_save()
                 except BaseException:
-                    self.overrides[entity_id] = old
+                    if old_override is not None: self.overrides[entity_id] = old_override
+                    if old_pause is not None: self.pauses[entity_id] = old_pause
                     self._update_sensor()
                     raise
         await self.async_evaluate(entity_id)
@@ -385,7 +441,9 @@ class Scheduler:
                 return
             now = dt_util.now()
             override_active = override_is_operational(program, self.overrides.get(entity_id), now)
-            has_target = resolve_target(program["slots"], program.get("away_temperature"), now)[0] is not None
+            has_target = effective_target(
+                program, self.overrides.get(entity_id), self.pauses.get(entity_id), now
+            )[0] is not None
             active = program["enabled"] and (has_target or program.get("hvac_mode") is not None or override_active)
             old_state = old.state if old else None
             action = availability_action(program["enabled"], active, old_state, new.state)
@@ -492,6 +550,12 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
     await hass.http.async_register_static_paths([
         StaticPathConfig("/climate_flow_scheduler", str(www_path), cache_headers=False)
     ])
+    # Load the card as soon as the integration is loaded, not at the end of the
+    # config entry setup: the dashboard resource must not depend on the
+    # scheduler, sensor and services wiring, and it must survive an entry
+    # reload (a reload does not re-run async_setup, so removing the URL on
+    # unload would hide the card until the next Home Assistant restart).
+    add_extra_js_url(hass, FRONTEND_URL)
     return True
 
 
@@ -515,6 +579,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: Any) -> bool:
         vol.Required("temperature"): vol.Any(int, float),
         vol.Optional("step"): vol.Any(None, int, float),
         vol.Required("duration"): vol.In(["30m", "1h", "2h", "next_change"])})
+    pause_schema = vol.Schema({vol.Required("climate_entity"): schema_entity,
+        vol.Required("temperature"): vol.Any(int, float),
+        vol.Required("duration"): vol.In(["1d", "3d", "7d", "14d", "30d"])})
 
     async def manual_override(call: ServiceCall) -> None:
         try:
@@ -523,8 +590,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: Any) -> bool:
             await scheduler.async_report_error(call.data["climate_entity"], err)
             raise
 
+    async def pause_program(call: ServiceCall) -> None:
+        try:
+            await scheduler.async_set_pause(call.data["climate_entity"], call.data["temperature"], call.data["duration"])
+        except ScheduleValidationError as err:
+            await scheduler.async_report_error(call.data["climate_entity"], err)
+            raise
+
     async def resume(call: ServiceCall) -> None:
-        await scheduler.async_clear_override(call.data["climate_entity"])
+        await scheduler.async_resume_schedule(call.data["climate_entity"])
 
     async def save(call: ServiceCall) -> None:
         try:
@@ -545,7 +619,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: Any) -> bool:
     async def delete(call: ServiceCall) -> None:
         await scheduler.async_delete(call.data["climate_entity"])
 
-    for name, handler, schema in (("save_program", save, set_program_schema), ("set_enabled", enable, enabled_schema), ("delete_program", delete, delete_schema), ("set_manual_override", manual_override, override_schema), ("resume_program", resume, delete_schema)):
+    for name, handler, schema in (("save_program", save, set_program_schema), ("set_enabled", enable, enabled_schema), ("delete_program", delete, delete_schema), ("set_manual_override", manual_override, override_schema), ("set_pause", pause_program, pause_schema), ("resume_program", resume, delete_schema)):
         if not hass.services.has_service(DOMAIN, name):
             hass.services.async_register(DOMAIN, name, handler, schema=schema)
     scheduler.refresh = async_track_time_change(
@@ -555,7 +629,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: Any) -> bool:
     )
     scheduler.unsub_state = hass.bus.async_listen("state_changed", scheduler.async_state_changed)
     await scheduler.async_evaluate()
-    add_extra_js_url(hass, FRONTEND_URL)
     return True
 
 
@@ -563,12 +636,11 @@ async def async_unload_entry(hass: HomeAssistant, entry: Any) -> bool:
     scheduler: Scheduler = hass.data[DOMAIN][entry.entry_id]
     if not await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
         return False
-    remove_extra_js_url(hass, FRONTEND_URL)
     if scheduler.refresh:
         scheduler.refresh()
     if scheduler.unsub_state:
         scheduler.unsub_state()
-    for name in ("save_program", "set_enabled", "delete_program", "set_manual_override", "resume_program"):
+    for name in ("save_program", "set_enabled", "delete_program", "set_manual_override", "set_pause", "resume_program"):
         hass.services.async_remove(DOMAIN, name)
     hass.data[DOMAIN].pop(entry.entry_id, None)
     return True

@@ -92,6 +92,12 @@
     "override_hvac_off": {
       "message": "Manual overrides are unavailable when the program sets HVAC off."
     },
+    "invalid_pause_duration": {
+      "message": "Choose a valid pause length."
+    },
+    "pause_hvac_off": {
+      "message": "A vacation pause is unavailable when the program sets HVAC off."
+    },
     "invalid_override_step": {
       "message": "The override step must be a finite positive number."
     }

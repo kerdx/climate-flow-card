@@ -100,9 +100,42 @@ set_manual_override:
             - "1h"
             - "2h"
             - next_change
+set_pause:
+  name: Pause program (vacation)
+  description: Hold one target for a number of days, then resume the weekly program automatically.
+  fields:
+    climate_entity:
+      name: Climate entity
+      description: Climate entity whose program to pause.
+      required: true
+      selector:
+        entity:
+          domain: climate
+    temperature:
+      name: Pause target
+      description: Target applied while the program is paused; it must sit on the climate temperature grid.
+      required: true
+      selector:
+        number:
+          min: -50
+          max: 100
+          step: any
+          mode: box
+    duration:
+      name: Pause length
+      description: How long the schedule stays paused; it resumes on its own when the pause expires.
+      required: true
+      selector:
+        select:
+          options:
+            - "1d"
+            - "3d"
+            - "7d"
+            - "14d"
+            - "30d"
 resume_program:
   name: Resume schedule
-  description: Clear the manual override and immediately evaluate the program.
+  description: Clear the manual override and the vacation pause, then immediately evaluate the program.
   fields:
     climate_entity:
       name: Climate entity

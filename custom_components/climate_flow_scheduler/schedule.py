@@ -350,10 +350,70 @@ def override_is_operational(program: dict[str, Any], override: dict[str, Any] | 
     return bool(program.get("enabled") and override and effective_program_target(program, override, now)[0] == "__manual_override__")
 
 
+# A pause holds one fixed target until it expires; then the weekly program is
+# evaluated again with no user action. Like :data:`AWAY_TARGET` the kind can
+# never collide with a slot id, which must start alphanumeric.
+PAUSE_TARGET = "__pause__"
+# Accepted pause lengths, in the same string form as override durations.
+PAUSE_DURATIONS = {"1d": timedelta(days=1), "3d": timedelta(days=3), "7d": timedelta(days=7), "14d": timedelta(days=14), "30d": timedelta(days=30)}
+
+
+def pause_expiry(now: datetime, duration: Any) -> datetime:
+    """Validate a pause length and return its timezone-aware expiry."""
+    if not isinstance(duration, str) or duration not in PAUSE_DURATIONS:
+        raise ScheduleError("Invalid pause duration", "invalid_pause_duration")
+    expiry_utc = _as_utc(now) + PAUSE_DURATIONS[duration]
+    return expiry_utc.astimezone(now.tzinfo) if now.tzinfo is not None else expiry_utc.replace(tzinfo=None)
+
+
+def normalize_pause(raw: Any) -> dict[str, Any] | None:
+    """Sanitize persisted pause data; a naive or malformed expiry is dropped."""
+    if not isinstance(raw, dict) or set(raw) - {"target", "until"}:
+        return None
+    try:
+        target = _temperature(raw["target"])
+        until = raw["until"]
+        if isinstance(until, str):
+            until = datetime.fromisoformat(until)
+        if not isinstance(until, datetime) or until.tzinfo is None:
+            return None
+    except (KeyError, ScheduleError, TypeError, ValueError, OverflowError):
+        return None
+    return {"target": target, "until": until.isoformat()}
+
+
+def pause_is_active(pause: Any, now: datetime) -> bool:
+    """Whether a validated pause still applies at ``now``."""
+    if not isinstance(pause, dict):
+        return False
+    until = pause.get("until")
+    try:
+        if isinstance(until, str):
+            until = datetime.fromisoformat(until)
+        if not isinstance(until, datetime) or until.tzinfo is None:
+            return False
+    except (TypeError, ValueError, OverflowError):
+        return False
+    return _as_utc(now) < _as_utc(until)
+
+
+def effective_target(program: dict[str, Any], override: dict[str, Any] | None, pause: Any, now: datetime) -> tuple[str | None, float | None]:
+    """Resolve the target to apply: manual override, then pause, then program.
+
+    A temporary manual override is an explicit user action, so it wins over a
+    pause; an expired pause or override falls through to the weekly program.
+    """
+    if override and override_is_operational(program, override, now):
+        return effective_program_target(program, override, now)
+    if pause_is_active(pause, now):
+        return PAUSE_TARGET, float(pause["target"])
+    return resolve_target(program["slots"], program.get("away_temperature"), now)
+
+
 def program_apply_key(mode: Any, target_kind: Any, target: Any) -> str:
-    """Include manual override temperature in the cache identity."""
+    """Include override and pause temperatures in the cache identity."""
     key = f"{mode or '-'}|{target_kind or '-'}"
-    if target_kind == "__manual_override__" and target is not None:
+    if target_kind in ("__manual_override__", PAUSE_TARGET) and target is not None:
         key += f"|{float(target).hex()}"
     return key
 
@@ -457,6 +517,15 @@ def _migrate_v1_to_v2(data: dict[str, Any]) -> dict[str, Any]:
 
 
 DATA_MIGRATIONS[1] = _migrate_v1_to_v2
+
+
+def _migrate_v2_to_v3(data: dict[str, Any]) -> dict[str, Any]:
+    """Initialize the persisted vacation pauses; programs and overrides stay."""
+    data.setdefault("pauses", {})
+    return data
+
+
+DATA_MIGRATIONS[2] = _migrate_v2_to_v3
 
 
 def migrate_storage_data(data: Any, from_version: Any, to_version: int) -> dict[str, Any] | None:
