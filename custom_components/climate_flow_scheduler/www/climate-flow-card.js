@@ -69,6 +69,9 @@ const STRINGS = {
     rangeInvalid: 'The low temperature must stay below the high temperature.',
     heat_coolNeedsRange: 'heat_cool needs a temperature range in every slot.',
     dualSlotUnsupported: 'A slot with a temperature range needs heat_cool: change the program mode or use one temperature.',
+    mixedModeRequired: 'Mixed single-target and range slots need a program HVAC mode for the single-target slots.',
+    mixedHeatCoolRequired: 'The climate entity must support heat_cool to use range slots in a mixed program.',
+    awayHeatCool: 'An outside-schedule temperature is a single target and cannot be used with heat_cool.',
     addSlot: '+ Add slot',
     deleteProgram: 'Delete program',
     saveProgram: 'Save program',
@@ -133,6 +136,7 @@ const STRINGS = {
       heat_cool_dual_required: 'A heat_cool program needs both temperatures in every slot.',
       dual_range_invalid: 'The low target {low} must stay below the high target {high}.',
       dual_slot_unsupported: 'A slot with two target temperatures needs heat_cool: set the program mode to heat_cool or use one temperature.',
+      mixed_slots_mode_required: 'A program with single and range slots needs hvac_mode for its single-target slots.',
     },
     sections: {
       identity: 'Identity and appearance',
@@ -231,6 +235,9 @@ const STRINGS = {
     rangeInvalid: 'La temperatura bassa deve restare sotto quella alta.',
     heat_coolNeedsRange: 'heat_cool richiede un intervallo di temperatura in ogni fascia.',
     dualSlotUnsupported: 'Una fascia con intervallo richiede heat_cool: cambia la modalità del programma oppure usa una sola temperatura.',
+    mixedModeRequired: 'Un programma con fasce singole e a intervallo richiede una modalità HVAC per le fasce a target singolo.',
+    mixedHeatCoolRequired: 'L’entità climate deve supportare heat_cool per usare fasce a intervallo in un programma misto.',
+    awayHeatCool: 'La temperatura fuori orario è un target singolo e non può essere usata con heat_cool.',
     addSlot: '+ Aggiungi fascia',
     deleteProgram: 'Elimina programma',
     saveProgram: 'Salva programma',
@@ -292,6 +299,7 @@ const STRINGS = {
       heat_cool_dual_required: 'Un programma heat_cool richiede entrambe le temperature in ogni fascia.',
       dual_range_invalid: 'Il limite basso {low} deve restare sotto il limite alto {high}.',
       dual_slot_unsupported: 'Una fascia con due temperature richiede heat_cool: imposta la modalità del programma su heat_cool oppure usa una sola temperatura.',
+      mixed_slots_mode_required: 'Un programma con fasce singole e a intervallo richiede hvac_mode per le fasce a target singolo.',
     },
     sections: {
       identity: 'Identità e aspetto',
@@ -393,6 +401,7 @@ export const validateScheduleDraft = (draft, strings = STRINGS.en, entity = unde
   if (draft.enabled && draft.slots.length === 0) return strings.needSlot;
   const away = draft.awayTemperature;
   if (away !== null && away !== undefined && String(away).trim() !== '' && numeric(away) === null) return strings.awayNumber;
+  const hasAwayTarget = away !== null && away !== undefined && String(away).trim() !== '';
   const mode = draft.hvacMode;
   if (mode !== null && mode !== undefined && mode !== '' && !SCHEDULABLE_MODES.includes(mode)) return strings.badMode;
   for (const slot of draft.slots) {
@@ -405,16 +414,24 @@ export const validateScheduleDraft = (draft, strings = STRINGS.en, entity = unde
     }
   }
   // Shape rules mirroring the backend: heat_cool has no single temperature to
-  // send, and a range slot only exists in heat_cool. The mode/slot pairing is
-  // checked for a saved program (schema) and, when the entity is known, for an
-  // enabled one -- the same condition under which the backend validates it.
-  if (mode === 'heat_cool' && draft.slots.some((slot) => !slot.range)) return strings.heat_coolNeedsRange;
+  // send. Mixed schedules use hvac_mode for scalar slots and temporarily
+  // switch range slots to heat_cool.
+  const hasRange = draft.slots.some((slot) => slot.range);
+  const hasSingle = draft.slots.some((slot) => !slot.range);
+  const mixedTargets = hasRange && hasSingle;
+  if (mode === 'heat_cool' && hasSingle) return strings.heat_coolNeedsRange;
+  if (draft.enabled && mode === 'heat_cool' && hasAwayTarget) return strings.awayHeatCool;
+  if (draft.enabled && mixedTargets && !mode) return strings.mixedModeRequired;
   if (entity && draft.enabled && validState(entity.state)) {
     const effectiveMode = mode || entity.state;
     if (effectiveMode === 'heat_cool') {
-      if (draft.slots.some((slot) => !slot.range)) return strings.heat_coolNeedsRange;
-    } else if (effectiveMode !== 'off' && draft.slots.some((slot) => slot.range)) {
-      return strings.dualSlotUnsupported;
+      if (hasSingle) return strings.heat_coolNeedsRange;
+      if (hasAwayTarget) return strings.awayHeatCool;
+    } else if (effectiveMode !== 'off') {
+      if (mixedTargets) {
+        const supportedModes = modes(entity);
+        if (supportedModes.length && !supportedModes.includes('heat_cool')) return strings.mixedHeatCoolRequired;
+      } else if (hasRange) return strings.dualSlotUnsupported;
     }
   }
   return null;
@@ -723,6 +740,33 @@ export const formatRelativeTime = (timestamp, nowMs = Date.now(), locale) => {
   if (hours < 24) return `${hours} h ago`;
   const days = Math.floor(hours / 24);
   return `${days} d ago`;
+};
+export const relativeRefreshDelay = (timestamp, nowMs = Date.now(), locale) => {
+  const time = typeof timestamp === 'number' ? timestamp : typeof timestamp === 'string' ? Date.parse(timestamp) : NaN;
+  const now = typeof nowMs === 'number' && Number.isFinite(nowMs) ? nowMs : Date.now();
+  if (!Number.isFinite(time) || !Number.isFinite(now)) return null;
+  let usesIntl = false;
+  const tag = typeof locale === 'string' && locale.trim() ? locale.trim() : null;
+  if (tag) {
+    try {
+      const RelativeTimeFormat = globalThis.Intl?.RelativeTimeFormat;
+      if (typeof RelativeTimeFormat === 'function') {
+        new RelativeTimeFormat(tag, { numeric: 'auto' });
+        usesIntl = true;
+      }
+    } catch {}
+  }
+  if (time > now) return Math.min(2_147_483_647, time - now + (usesIntl ? 4_500 : 44_500));
+  const elapsed = (now - time) / 1000;
+  const rounded = Math.round(elapsed);
+  let nextChange;
+  if (usesIntl && rounded < 5) nextChange = 4.5;
+  else if (usesIntl && rounded < 60) nextChange = rounded + 0.5;
+  else if (!usesIntl && rounded < 45) nextChange = 44.5;
+  else if (rounded < 3600) nextChange = (Math.floor(rounded / 60) + 1) * 60 - 0.5;
+  else if (rounded < 86_400) nextChange = (Math.floor(rounded / 3_600) + 1) * 3_600 - 0.5;
+  else nextChange = (Math.floor(rounded / 86_400) + 1) * 86_400 - 0.5;
+  return Math.min(2_147_483_647, Math.max(250, Math.ceil((nextChange - elapsed) * 1000)));
 };
 export const pillStatusParts = (options = {}) => {
   const { statusText = '', humidityValue = null, relativeText = '', showStateChip = true, showHumidityChip = false, locale } = options;
@@ -1283,6 +1327,7 @@ export class ClimateFlowCard extends HTMLElementBase {
     this._renderedSignature = null;
     this._renderPreservingDeltaFocus();
     this._renderedSignature = this._renderSignature();
+    this._scheduleRelativeRefresh();
   }
   set hass(hass) {
     this._hass = hass;
@@ -1294,11 +1339,16 @@ export class ClimateFlowCard extends HTMLElementBase {
     // +/- deltas and the optimistic preview repaint through their own paths
     // and never pass through this gate.
     const signature = this._renderSignature();
-    if (signature === this._renderedSignature && this.shadowRoot) return;
+    if (signature === this._renderedSignature && this.shadowRoot) {
+      this._scheduleRelativeRefresh();
+      return;
+    }
     this._renderedSignature = signature;
     this._renderPreservingDeltaFocus();
+    this._scheduleRelativeRefresh();
   }
-  disconnectedCallback() { clearTimeout(this._optimisticTimer); this._optimisticTimer = null; this._optimistic = null; clearTimeout(this._tapTimer); this._tapTimer = null; clearTimeout(this._holdTimer); this._holdTimer = null; clearTimeout(this._commitTimer); this._commitTimer = null; this._holdFired = false; this._lastTapAt = 0; this._detachDialDrag(); this._detachHeroDrag(); this._dragConsumed = false; }
+  connectedCallback() { this._scheduleRelativeRefresh(); }
+  disconnectedCallback() { clearTimeout(this._optimisticTimer); this._optimisticTimer = null; this._optimistic = null; clearTimeout(this._relativeTimer); this._relativeTimer = null; this._relativeRefreshKey = null; clearTimeout(this._tapTimer); this._tapTimer = null; clearTimeout(this._holdTimer); this._holdTimer = null; clearTimeout(this._commitTimer); this._commitTimer = null; this._holdFired = false; this._lastTapAt = 0; this._detachDialDrag(); this._detachHeroDrag(); this._dragConsumed = false; }
   getCardSize() { const layout = this.config?.layout; return layout === 'circular' ? 3 : layout === 'compact' ? 2 : 1; }
   _service(domain, service, data) {
     if (!this._hass) return Promise.resolve();
@@ -1357,6 +1407,40 @@ export class ClimateFlowCard extends HTMLElementBase {
     try {
       return formatRelativeTime(timestamp, Date.now(), this._hass?.locale?.language);
     } catch { return ''; }
+  }
+  _refreshRelativeDisplay() {
+    const chip = this.shadowRoot?.querySelector('.status-line .relative');
+    if (chip) chip.textContent = this._relativeDisplay(this._hass?.states?.[this.config?.entity]);
+  }
+  _scheduleRelativeRefresh() {
+    if (!this.isConnected) {
+      clearTimeout(this._relativeTimer);
+      this._relativeTimer = null;
+      this._relativeRefreshKey = null;
+      return;
+    }
+    const chip = this.shadowRoot?.querySelector('.status-line .relative');
+    const timestamp = pickEntityTimestamp(this._hass?.states?.[this.config?.entity]);
+    const locale = this._hass?.locale?.language;
+    if (!chip || !timestamp) {
+      clearTimeout(this._relativeTimer);
+      this._relativeTimer = null;
+      this._relativeRefreshKey = null;
+      return;
+    }
+    const key = `${timestamp}\u0000${locale || ''}`;
+    if (this._relativeTimer && this._relativeRefreshKey === key) return;
+    clearTimeout(this._relativeTimer);
+    this._relativeTimer = null;
+    const delay = relativeRefreshDelay(timestamp, Date.now(), locale);
+    if (delay === null) { this._relativeRefreshKey = null; return; }
+    this._relativeRefreshKey = key;
+    this._relativeTimer = setTimeout(() => {
+      this._relativeTimer = null;
+      this._relativeRefreshKey = null;
+      this._refreshRelativeDisplay();
+      this._scheduleRelativeRefresh();
+    }, delay);
   }
   _renderSignature() {
     // Everything the DOM can reflect: the climate entity (its state, every

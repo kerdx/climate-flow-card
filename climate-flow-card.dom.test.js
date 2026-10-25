@@ -403,6 +403,32 @@ test('a changed target, a sensor update or an aged timestamp reopens the gate', 
   card.disconnectedCallback?.();
 });
 
+test('the relative-time chip refreshes itself without a Home Assistant state change', async () => {
+  const realNow = Date.now;
+  Date.now = () => realNow();
+  const card = new ClimateFlowCard();
+  try {
+    card.setConfig({ entity: 'climate.living_room', layout: 'pill' });
+    const entity = climateEntity();
+    entity.last_changed = new Date(Date.now() - 30_000).toISOString();
+    document.body.append(card);
+    card.hass = {
+      states: { 'climate.living_room': entity },
+      locale: { language: 'en' },
+      config: { unit_system: { temperature: '°C' } },
+      callService: async () => {},
+    };
+    const chip = card.shadowRoot.querySelector('.status-line .relative');
+    assert.ok(chip);
+    const before = chip.textContent;
+    await wait(700);
+    assert.notEqual(chip.textContent, before, 'the visible label advances without another hass tick');
+  } finally {
+    card.remove();
+    Date.now = realNow;
+  }
+});
+
 test('the render gate reopens on a new config', () => {
   const { card, shadow } = build();
   const hero = shadow.querySelector('.hero');

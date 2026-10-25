@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.7.2
+
+- Fix mixed single/range programs: set `hvac_mode` for scalar slots, switch to `heat_cool` for range slots, then restore the configured mode. The editor and backend reject mixed enabled programs without the required mode or entity capability.
+- Reject single outside-schedule targets for enabled `heat_cool` programs before applying them; preserve disabled drafts and surface errors for invalid stored schedules without discarding them.
+- Keep the relative-time chip current with a timer at the next displayed time boundary, and clean up the timer when the card disconnects.
+- Close translation files in the package tests to prevent `ResourceWarning`s.
+
 ## v1.7.1
 
 - Avoid rebuilding the card on Home Assistant updates that do not change anything it displays, reducing unnecessary work and preserving focus. Relevant climate/scheduler state, locale, units and aging timestamps still trigger a refresh.
@@ -9,11 +16,11 @@
 
 ## v1.7.0
 
-- Slots accept both target forms: either one `temperature`, or `target_temp_low` + `target_temp_high` for heat_cool. The key set is exact in both shapes, mixed slots are allowed in the same program, both bounds are validated on the entity grid (limits, step, low strictly below high), and the overlap rules are unchanged. Stored programs keep working as they are; no migration.
-- `heat_cool` joins the schedulable program modes and is offered by the `save_program` service whenever the entity exposes it: a heat_cool program requires both temperatures in every slot (checked at save time), and a range slot requires the effective mode to be heat_cool (checked when an enabled program is saved or applied). The manual override and the vacation pause stay single-target and are refused on a heat_cool program instead of sending a target the entity cannot accept.
+- Slots accept both target forms: either one `temperature`, or `target_temp_low` + `target_temp_high` for heat_cool. The key set is exact in both shapes, mixed slots are allowed when the program specifies the scalar-slot mode, both bounds are validated on the entity grid (limits, step, low strictly below high), and the overlap rules are unchanged. Stored programs keep working as they are; no migration.
+- `heat_cool` joins the schedulable program modes and is offered by the `save_program` service whenever the entity exposes it: a heat_cool program requires both temperatures in every slot, while mixed programs switch to heat_cool for range slots and restore their configured scalar mode for single-target slots. The outside-schedule target, manual override and vacation pause remain single-target features and cannot be applied in heat_cool mode.
 - The scheduler sends the right payload at a slot boundary: a dual slot applies `set_temperature` with `target_temp_low`/`target_temp_high` compared against the entity's current bounds (same numeric tolerance as single targets), while single slots and the outside-schedule temperature keep `temperature`. The applied-state cache key covers both bounds.
 - The schedule dialog edits both shapes: a per-slot **Range** switch (offered only where heat_cool exists, always kept on slots that already carry a pair) swaps the single temperature field for low/high inputs, seeded from the entity's live range or one step above the current value; switching back reuses the low bound, which is already on the entity grid. Save goes through a single payload builder that emits exactly one target form per slot.
-- Client-side validation mirrors the backend before any service call: a pair must be numeric and ordered, heat_cool needs a pair in every slot, and an enabled program's mode must match its slot shapes -- with the same exceptions (disabled program, unavailable entity, `off`) the backend applies. New localized codes: `heat_cool_dual_required`, `dual_range_invalid`, `dual_slot_unsupported` (EN/IT in the integration exceptions and in the card strings), and the `invalid_hvac_mode` message lists the full mode set.
+- Client-side validation mirrors the backend before any service call: a pair must be numeric and ordered, heat_cool needs a pair in every slot, mixed programs require a scalar-slot mode, and outside-schedule scalar targets are refused in heat_cool. New localized codes: `heat_cool_dual_required`, `dual_range_invalid`, `dual_slot_unsupported`, `mixed_slots_mode_required` (EN/IT in the integration exceptions and in the card strings), and the `invalid_hvac_mode` message lists the full mode set.
 - `services.yaml` documents the two slot shapes and adds `heat_cool` to the program's HVAC mode options.
 
 ## v1.6.0

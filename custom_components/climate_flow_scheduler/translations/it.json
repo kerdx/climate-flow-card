@@ -92,6 +92,9 @@
     "dual_slot_unsupported": {
       "message": "Una fascia con due temperature richiede heat_cool: imposta la modalità del programma su heat_cool oppure usa una sola temperatura."
     },
+    "mixed_slots_mode_required": {
+      "message": "Un programma con fasce singole e a intervallo richiede hvac_mode per le fasce a target singolo."
+    },
     "invalid_override_duration": {
       "message": "Scegli una durata di override manuale valida."
     },

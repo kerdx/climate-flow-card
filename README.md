@@ -99,9 +99,9 @@ Each slot must use exactly one target shape:
   target_temp_high: 21
 ```
 
-Targets must fit the climate entity's temperature limits and step. Programs may contain both slot shapes, but a dual-target slot requires the effective HVAC mode to be `heat_cool`. If the program sets `hvac_mode: heat_cool`, every slot must use the dual-target shape; the entity must expose that mode. The schedule editor offers a **Range** switch when the entity supports `heat_cool` and keeps it enabled for slots that already have a range.
+Targets must fit the climate entity's temperature limits and step. Programs may contain both slot shapes. A mixed program must set `hvac_mode` to the mode for its single-target slots; range slots switch to `heat_cool` and the scheduler restores the configured mode at the next scalar slot. The entity must expose both modes. A program set to `hvac_mode: heat_cool` must use dual targets in every slot. The schedule editor offers a **Range** switch when the entity supports `heat_cool` and keeps it enabled for slots that already have a range.
 
-`hvac_mode` is optional; when set, it is applied before the target both during and outside the slots. An optional outside-schedule temperature (`away_temperature`) sets a target outside slots; if it is absent, no target is sent outside slots. `hvac_mode` is still applied outside slots even when no target is sent. The outside-schedule temperature, manual overrides, and vacation pauses are single-target features, so they require an effective mode that accepts a single temperature; overrides and pauses cannot be used in `heat_cool` mode.
+`hvac_mode` is optional; when set, it is applied before the target during and outside the slots. In a mixed program it is the scalar-slot mode, and the scheduler switches to `heat_cool` only for range slots. An optional outside-schedule temperature (`away_temperature`) sets a target outside slots; if it is absent, no target is sent outside slots. The optional `hvac_mode` is still applied outside slots even when no target is sent. The outside-schedule temperature is single-target and cannot be used when the program runs `heat_cool`. Manual overrides and vacation pauses are also single-target and cannot be used by a `heat_cool` program.
 
 Example service call for a `heat_cool` program:
 

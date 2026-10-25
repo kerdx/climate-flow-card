@@ -24,12 +24,12 @@ save_program:
       example: '[{"id":"weekday-morning","days":[1,2,3,4,5],"start":"06:30","end":"08:00","temperature":20}]'
     away_temperature:
       name: Outside schedule temperature
-      description: Optional single target applied outside the scheduled slots. Omit or leave empty to keep the last target (no call outside slots).
+      description: Optional single target applied outside the scheduled slots. It cannot be used while the program runs heat_cool. Omit or leave empty to keep the last target (no call outside slots).
       required: false
       example: 17
     hvac_mode:
       name: HVAC mode
-      description: Optional mode the program sets while enabled (applied before the target). Omit to leave the current mode alone. heat_cool is available when every slot carries both target temperatures.
+      description: Optional mode the program sets for single-target slots while enabled. Omit to leave the current mode alone. A range slot switches to heat_cool and back to this mode; mixed single/range schedules require this mode. A heat_cool program requires every slot to carry both targets.
       required: false
       selector:
         select:

@@ -141,15 +141,15 @@ class PackageTests(unittest.TestCase):
             "same_start_end", "slots_overlap", "climate_range_unavailable",
             "climate_range_invalid", "target_outside_limits", "target_off_step",
             "heat_cool_unsupported", "heat_cool_dual_required",
-            "dual_range_invalid", "dual_slot_unsupported",
+            "dual_range_invalid", "dual_slot_unsupported", "mixed_slots_mode_required",
             "invalid_override_duration", "no_next_change", "override_hvac_off", "invalid_override_step",
             "invalid_pause_duration", "pause_hvac_off",
         }
         exceptions = {}
         for language in ("en", "it"):
-            translations = json.load(
-                (ROOT / f"custom_components/climate_flow_scheduler/translations/{language}.json").open(encoding="utf-8")
-            )
+            translation_path = ROOT / f"custom_components/climate_flow_scheduler/translations/{language}.json"
+            with translation_path.open(encoding="utf-8") as translation_file:
+                translations = json.load(translation_file)
             exceptions[language] = translations.get("exceptions", {})
             self.assertTrue(
                 service_error_codes <= set(exceptions[language]),

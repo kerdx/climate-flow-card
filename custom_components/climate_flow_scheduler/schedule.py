@@ -179,6 +179,15 @@ def slot_is_dual(slot: Any) -> bool:
     return isinstance(slot, dict) and "target_temp_low" in slot
 
 
+def has_mixed_target_shapes(slots: Any) -> bool:
+    """Whether slots include both scalar and heat_cool target forms."""
+    if not isinstance(slots, list):
+        return False
+    has_dual = any(slot_is_dual(slot) for slot in slots)
+    has_single = any(not slot_is_dual(slot) for slot in slots)
+    return has_dual and has_single
+
+
 def slot_target(slot: dict[str, Any]) -> float | tuple[float, float]:
     """The value to apply: a float, or ``(low, high)`` for a dual slot."""
     if slot_is_dual(slot):

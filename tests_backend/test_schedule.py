@@ -75,6 +75,10 @@ class ScheduleTests(unittest.TestCase):
         self.assertEqual(program["away_temperature"], 17.0)
         self.assertIsNone(validate_program([slot()])["away_temperature"])
         self.assertEqual(validate_program([], False, 17)["away_temperature"], 17.0)
+        # Pure validation preserves a disabled program's draft; the climate-
+        # aware enable/save path rejects a scalar outside target in heat_cool.
+        heat_cool = validate_program([dual_slot()], False, 17, "heat_cool")
+        self.assertEqual(heat_cool["away_temperature"], 17.0)
         for bad in (True, "17", float("nan"), float("inf")):
             with self.subTest(bad=bad), self.assertRaises(ScheduleError):
                 validate_program([slot()], False, bad)
@@ -162,7 +166,11 @@ class ScheduleTests(unittest.TestCase):
         self.assertEqual(resolve_target(dual, None, datetime(2026, 10, 12, 9, 30)), ("day", (17.0, 21.0)))
 
     def test_dual_slot_schema_is_exact_and_mixed_programs_are_allowed(self):
-        program = validate_program([dual_slot("day", [1], "09:00", "10:00"), slot("night", [1], "21:00", "22:00", 19)], True)
+        program = validate_program(
+            [dual_slot("day", [1], "09:00", "10:00"), slot("night", [1], "21:00", "22:00", 19)],
+            True,
+            hvac_mode="heat",
+        )
         self.assertEqual(program["slots"][0]["target_temp_low"], 18.0)
         self.assertEqual(program["slots"][0]["target_temp_high"], 22.0)
         self.assertEqual(program["slots"][1]["temperature"], 19.0)

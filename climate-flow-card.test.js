@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { ClimateFlowCard, ClimateFlowCardEditor, CLIMATE_FLOW_CARD_TAG, CLIMATE_FLOW_CARD_EDITOR_TAG, registerClimateFlowElements, isClimateFlowElementsRegistered, isHomeAssistantFrontendReady, scheduleClimateFlowReregistration, clampTarget, temperaturePayload, targetModel, hvacToggleMode, scheduleDraft, validateScheduleDraft, seedRange, draftSlotPayload, defaultCardConfig, configSchema, configSchemaFields, getEntitySuggestion, sameCardConfig, errorLabel, effectiveStep, normalizeLayout, isClimateActive, isScheduleEnabled, awayTemperaturePayload, schedulableModes, manualOverrideServicePayload, overrideDurationChoices, formatOverrideExpiry, overrideFocusSelector,
-  pauseServicePayload, pauseDurationChoices, activePause, PAUSE_DURATIONS, climateStatusKey, statusLabel, modeLabel, resolveLanguage, cardStrings, fieldLabel, pickEntityTimestamp, formatRelativeTime, formatNumber, pillStatusParts, currentTemperatureDisplay, CARD_SURFACES, normalizeAccentColor, normalizeSurface, sliderFillPercent, paintSliderFill, CARD_ACTIONS, normalizeCardAction, MODE_ACCENTS, modeAccentColor, cardLanguage, mainTemperatureKind, CARD_OPTION_DEFAULTS, cardDefault, stripCardDefaults, heroTemperaturePlan,
+  pauseServicePayload, pauseDurationChoices, activePause, PAUSE_DURATIONS, climateStatusKey, statusLabel, modeLabel, resolveLanguage, cardStrings, fieldLabel, pickEntityTimestamp, formatRelativeTime, relativeRefreshDelay, formatNumber, pillStatusParts, currentTemperatureDisplay, CARD_SURFACES, normalizeAccentColor, normalizeSurface, sliderFillPercent, paintSliderFill, CARD_ACTIONS, normalizeCardAction, MODE_ACCENTS, modeAccentColor, cardLanguage, mainTemperatureKind, CARD_OPTION_DEFAULTS, cardDefault, stripCardDefaults, heroTemperaturePlan,
   HAPTIC_STYLES, HAPTIC_PATTERNS, hapticPattern, normalizeHapticStyle, vibrateSupported, fireHaptic,
   ANIMATION_DURATION_DEFAULT, normalizeAnimationDuration, COMMIT_DEBOUNCE_MS, COMMIT_RETRY_MS, COMMIT_RETRIES,
   DRAG_THRESHOLD_PX, DRAG_STEP_PX, dragStepValue,
@@ -912,7 +912,8 @@ test('dual-slot draft validation mirrors the backend shape rules', () => {
   const single = { ...range, range: false, temperature: 21, targetTempLow: null, targetTempHigh: null };
   assert.equal(validateScheduleDraft({ ...base, slots: [range] }), null, 'a dual slot is valid on its own');
   assert.equal(validateScheduleDraft({ ...base, slots: [single] }), null, 'a single slot is valid on its own');
-  assert.equal(validateScheduleDraft({ ...base, slots: [single, range] }), null, 'mixed programs are allowed per slot');
+  assert.match(validateScheduleDraft({ ...base, slots: [single, range] }), /need a program HVAC mode/i, 'mixed programs need an explicit scalar-slot mode');
+  assert.equal(validateScheduleDraft({ ...base, hvacMode: 'heat', slots: [single, range] }), null, 'a mixed program uses heat for scalar slots and heat_cool for ranges');
   // Both bounds are required and the low one stays strictly below the high one.
   for (const broken of [
     { ...range, targetTempLow: 22, targetTempHigh: 22 },
@@ -931,6 +932,8 @@ test('dual-slot draft validation mirrors the backend shape rules', () => {
   // the same condition the backend validates on save.
   const heatCoolEntity = { state: 'heat', attributes: { hvac_modes: ['off', 'heat', 'heat_cool'] } };
   assert.equal(validateScheduleDraft({ ...base, slots: [single] }, undefined, heatCoolEntity), null, 'a single slot needs nothing special in heat');
+  assert.equal(validateScheduleDraft({ ...base, hvacMode: 'heat', slots: [single, range] }, undefined, heatCoolEntity), null, 'mixed slots switch to heat_cool only for their range');
+  assert.match(validateScheduleDraft({ ...base, hvacMode: 'heat', slots: [single, range] }, undefined, { state: 'heat', attributes: { hvac_modes: ['off', 'heat'] } }), /must support heat_cool/i);
   assert.equal(validateScheduleDraft({ ...base, hvacMode: 'off', slots: [range] }, undefined, heatCoolEntity), null, 'off never sends a target');
   assert.match(validateScheduleDraft({ ...base, hvacMode: 'heat', slots: [range] }, undefined, heatCoolEntity), /needs heat_cool: change the program mode/);
   assert.equal(validateScheduleDraft({ ...base, hvacMode: 'heat_cool', slots: [single] }, undefined, heatCoolEntity), 'heat_cool needs a temperature range in every slot.');
@@ -941,6 +944,7 @@ test('dual-slot draft validation mirrors the backend shape rules', () => {
   assert.equal(validateScheduleDraft({ ...base, slots: [range] }, undefined, liveDual), null);
   // A disabled program is only checked on enable, like the backend.
   assert.equal(validateScheduleDraft({ ...base, enabled: false, hvacMode: 'heat', slots: [range] }, undefined, heatCoolEntity), null);
+  assert.equal(validateScheduleDraft({ ...base, enabled: false, slots: [single, range] }), null, 'a disabled mixed program can be configured before it is enabled');
   // An unavailable entity cannot be paired against anything at save time.
   assert.equal(validateScheduleDraft({ ...base, hvacMode: 'heat', slots: [range] }, undefined, { state: 'unavailable', attributes: {} }), null);
   // The Italian strings answer the same rules.
@@ -986,6 +990,20 @@ test('outside-schedule temperature validation and payload', () => {
   for (const awayTemperature of ['warm', 'NaN', {}]) {
     assert.match(validateScheduleDraft({ ...draft, awayTemperature }), /outside-schedule temperature/i);
   }
+  const heatCoolRange = { id: 'range', days: [1], start: '09:00', end: '10:00', range: true, targetTempLow: 18, targetTempHigh: 22 };
+  assert.equal(
+    validateScheduleDraft({ enabled: false, awayTemperature: 17, hvacMode: 'heat_cool', slots: [heatCoolRange] }),
+    null,
+    'a disabled program can retain a draft outside target until it is enabled',
+  );
+  assert.match(
+    validateScheduleDraft({ enabled: true, awayTemperature: 17, hvacMode: 'heat_cool', slots: [heatCoolRange] }),
+    /outside-schedule temperature is a single target/i,
+  );
+  assert.match(
+    validateScheduleDraft({ enabled: true, awayTemperature: 17, hvacMode: null, slots: [heatCoolRange] }, undefined, { state: 'heat_cool', attributes: { hvac_modes: ['off', 'heat_cool'] } }),
+    /outside-schedule temperature is a single target/i,
+  );
   assert.equal(awayTemperaturePayload(17), 17);
   assert.equal(awayTemperaturePayload('17.5'), 17.5);
   for (const empty of ['', '   ', null, undefined, 'unknown']) assert.equal(awayTemperaturePayload(empty), null);
@@ -1098,6 +1116,15 @@ test('relative time uses last change before last update and stays short', () => 
   assert.equal(pickEntityTimestamp({ last_updated: '2026-10-12T11:59:00Z' }), '2026-10-12T11:59:00Z');
   assert.equal(pickEntityTimestamp({ last_changed: 'bad', last_updated: 'also-bad' }), null);
   assert.equal(pickEntityTimestamp({}), null);
+});
+
+test('relative refresh is scheduled at the next visible time boundary', () => {
+  const now = Date.parse('2026-10-12T12:00:00Z');
+  assert.equal(relativeRefreshDelay('2026-10-12T11:59:30Z', now, 'en'), 500, 'localized seconds update at the next rounded second');
+  assert.equal(relativeRefreshDelay('2026-10-12T11:58:30Z', now, 'en'), 29_500, 'localized minutes update at the next minute');
+  assert.equal(relativeRefreshDelay('2026-10-12T11:59:20Z', now, ''), 4_500, 'the English fallback refreshes when just now changes');
+  assert.equal(relativeRefreshDelay('2026-10-12T12:00:01Z', now, 'en'), 5_500, 'future timestamps refresh after the now label changes');
+  assert.equal(relativeRefreshDelay('not-a-date', now, 'en'), null);
 });
 
 test('relative time localizes with hass locale through Intl', (t) => {
@@ -1518,8 +1545,8 @@ test('every card rebuild restores focus on an active +/- delta and never steals 
   const source = readFileSync(new URL('./custom_components/climate_flow_scheduler/www/climate-flow-card.js', import.meta.url), 'utf8');
 
   // Static wiring: all rebuild paths go through the same wrapper, and the
-  // hass gate returns before touching the DOM only when nothing changed.
-  assert.match(source, /const signature = this\._renderSignature\(\);\s+if \(signature === this\._renderedSignature && this\.shadowRoot\) return;\s+this\._renderedSignature = signature;\s+this\._renderPreservingDeltaFocus\(\);/);
+  // hass gate avoids rebuilding the DOM when nothing displayed has changed.
+  assert.match(source, /const signature = this\._renderSignature\(\);\s+if \(signature === this\._renderedSignature && this\.shadowRoot\) \{\s+this\._scheduleRelativeRefresh\(\);\s+return;\s+\}\s+this\._renderedSignature = signature;\s+this\._renderPreservingDeltaFocus\(\);/);
   const cardStart = source.indexOf('export class ClimateFlowCard extends');
   const configStart = source.indexOf('  setConfig(config) {', cardStart);
   const hassStart = source.indexOf('  set hass(hass)', configStart);

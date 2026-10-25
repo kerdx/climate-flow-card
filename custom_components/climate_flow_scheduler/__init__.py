@@ -30,6 +30,7 @@ from .schedule import (
     validate_target,
     validate_dual_target,
     slot_is_dual,
+    has_mixed_target_shapes,
     dual_needs_update,
     validate_override_step,
     normalize_manual_override,
@@ -191,6 +192,7 @@ class Scheduler:
         try:
             program = validate_program(slots, enabled, away_temperature, hvac_mode)
             if enabled:
+                _validate_program_shape(program)
                 state = self.hass.states.get(entity_id)
                 if state is not None and state.state not in ("unavailable", "unknown"):
                     _validate_program(state, program)
@@ -229,12 +231,13 @@ class Scheduler:
                 raise ScheduleValidationError("No schedule exists for this climate entity", code="no_program")
             if enabled:
                 state = self.hass.states.get(entity_id)
-                if state is not None and state.state not in ("unavailable", "unknown"):
-                    try:
+                try:
+                    _validate_program_shape(self.programs[entity_id])
+                    if state is not None and state.state not in ("unavailable", "unknown"):
                         _validate_program(state, self.programs[entity_id])
-                    except (ScheduleError, HomeAssistantError) as err:
-                        code = getattr(err, "code", None) or "entity_validation_failed"
-                        raise ScheduleValidationError(str(err), code=code, context=getattr(err, "context", None)) from err
+                except (ScheduleError, HomeAssistantError) as err:
+                    code = getattr(err, "code", None) or "entity_validation_failed"
+                    raise ScheduleValidationError(str(err), code=code, context=getattr(err, "context", None)) from err
             snapshot = self._snapshot_entity(entity_id)
             try:
                 self.programs[entity_id]["enabled"] = enabled
@@ -305,6 +308,25 @@ class Scheduler:
                 # then the weekly program.
                 target_kind, target = effective_target(program, override, pause, now)
                 mode = program.get("hvac_mode")
+                mixed_targets = has_mixed_target_shapes(program["slots"])
+                if mixed_targets and mode is None:
+                    self.pending.discard(entity_id)
+                    self.applied_slot.pop(entity_id, None)
+                    self._set_error(
+                        entity_id,
+                        "mixed_slots_mode_required",
+                        "A program with single and range slots needs hvac_mode for its single-target slots",
+                    )
+                    continue
+                if mode == "heat_cool" and program.get("away_temperature") is not None:
+                    self.pending.discard(entity_id)
+                    self.applied_slot.pop(entity_id, None)
+                    self._set_error(
+                        entity_id,
+                        "heat_cool_unsupported",
+                        "A single target cannot be applied while heat_cool is active; both target temperatures are required",
+                    )
+                    continue
                 if target_kind is None and mode is None:
                     self.applied_slot[entity_id] = None
                     self.pending.discard(entity_id)
@@ -315,7 +337,12 @@ class Scheduler:
                 # change still stands until the next slot boundary.
                 # Override targets can change without changing their kind;
                 # include the exact validated target so each edit is applied.
-                apply_key = program_apply_key(mode, target_kind, target)
+                target_mode = mode
+                if mixed_targets and mode != "off" and isinstance(target, tuple):
+                    # A dual slot in a mixed program temporarily runs in
+                    # heat_cool; mode is restored for the scalar slots.
+                    target_mode = "heat_cool"
+                apply_key = program_apply_key(target_mode, target_kind, target)
                 if entity_id not in self.pending and self.applied_slot.get(entity_id, object()) == apply_key:
                     continue
                 state = self.hass.states.get(entity_id)
@@ -325,18 +352,27 @@ class Scheduler:
                     continue
                 try:
                     step_override = None
-                    if mode is not None:
-                        _validate_hvac_mode(state, mode)
-                    if target is not None and mode != "off":
+                    if (
+                        mode is None
+                        and program.get("away_temperature") is not None
+                        and state.state == "heat_cool"
+                    ):
+                        raise ScheduleError(
+                            "The outside-schedule target is a single temperature and cannot be used with heat_cool",
+                            "heat_cool_unsupported",
+                        )
+                    if target_mode is not None:
+                        _validate_hvac_mode(state, target_mode)
+                    if target is not None and target_mode != "off":
                         step_override = validate_override_step(override.get("step")) if target_kind == "__manual_override__" and override else None
                         if isinstance(target, tuple):
                             # Overrides and pauses are always single floats, so a
                             # pair can only come from a dual slot; it has no
                             # step override to apply.
                             step_override = None
-                            _validate_dual_target(state, target[0], target[1], _effective_mode(state, mode))
+                            _validate_dual_target(state, target[0], target[1], _effective_mode(state, target_mode))
                         else:
-                            _validate_climate_target(state, [target], mode, step_override)
+                            _validate_climate_target(state, [target], target_mode, step_override)
                 except (ScheduleError, HomeAssistantError) as err:
                     # A permanent validation failure is retried on config/state change,
                     # but not on every minute tick. ScheduleError is raised by the
@@ -348,11 +384,11 @@ class Scheduler:
                     self._set_error(entity_id, getattr(err, "code", None) or "entity_validation_failed", str(err), log=True)
                     continue
                 try:
-                    if mode is not None and state.state != mode:
+                    if target_mode is not None and state.state != target_mode:
                         await self.hass.services.async_call("climate", "set_hvac_mode", {
-                            "entity_id": entity_id, "hvac_mode": mode,
+                            "entity_id": entity_id, "hvac_mode": target_mode,
                         }, blocking=True)
-                    if target is not None and mode != "off":
+                    if target is not None and target_mode != "off":
                         if isinstance(target, tuple):
                             low, high = target
                             # A dual pair never carries a step override: those
@@ -525,21 +561,43 @@ def _effective_mode(state: Any, mode: Any) -> Any:
     return mode if mode is not None else state.state
 
 
+def _validate_program_shape(program: dict[str, Any]) -> None:
+    """Check target-shape rules that do not depend on a live climate state."""
+    mode = program.get("hvac_mode")
+    if has_mixed_target_shapes(program["slots"]) and mode is None:
+        raise ScheduleError(
+            "A program with single and range slots needs hvac_mode for its single-target slots",
+            "mixed_slots_mode_required",
+        )
+    if mode == "heat_cool" and program.get("away_temperature") is not None:
+        raise ScheduleError(
+            "The outside-schedule target is a single temperature and cannot be used with heat_cool",
+            "heat_cool_unsupported",
+        )
+
+
 def _validate_program(state: Any, program: dict[str, Any]) -> None:
     """Validate the program's mode and targets against the entity.
 
-    Each slot is checked in its own shape: a single temperature must fit the
-    effective mode, a dual slot requires heat_cool (checked here with the mode
-    in hand, so a mismatch is reported at save time rather than at a boundary).
+    In a mixed program, hvac_mode controls scalar slots while range slots
+    temporarily use heat_cool; otherwise the configured/current mode applies
+    uniformly. Mode/shape mismatches are rejected on save, not at a boundary.
     """
+    _validate_program_shape(program)
     mode = program.get("hvac_mode")
+    mixed_targets = has_mixed_target_shapes(program["slots"])
     if mode is not None:
         _validate_hvac_mode(state, mode)
     if mode == "off":
         return
+    if mixed_targets:
+        # In mixed programs hvac_mode is the scalar-slot mode; range slots
+        # temporarily switch to heat_cool and return to that mode afterward.
+        _validate_hvac_mode(state, "heat_cool")
     for slot in program["slots"]:
         if slot_is_dual(slot):
-            _validate_dual_target(state, slot["target_temp_low"], slot["target_temp_high"], _effective_mode(state, mode))
+            effective_mode = "heat_cool" if mixed_targets else _effective_mode(state, mode)
+            _validate_dual_target(state, slot["target_temp_low"], slot["target_temp_high"], effective_mode)
         else:
             _validate_climate_target(state, [slot["temperature"]], mode)
     away = program.get("away_temperature")

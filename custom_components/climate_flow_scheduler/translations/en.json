@@ -92,6 +92,9 @@
     "dual_slot_unsupported": {
       "message": "A slot with two target temperatures needs heat_cool: set the program mode to heat_cool or use one temperature."
     },
+    "mixed_slots_mode_required": {
+      "message": "A program with single and range slots needs hvac_mode for its single-target slots."
+    },
     "invalid_override_duration": {
       "message": "Choose a valid manual override duration."
     },

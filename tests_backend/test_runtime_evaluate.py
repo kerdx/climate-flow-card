@@ -122,6 +122,93 @@ class RuntimeEvaluateTests(unittest.IsolatedAsyncioTestCase):
         await scheduler.async_evaluate()
         self.assertEqual(len(hass.services.calls), 1, "an aligned pair is not resent")
 
+    async def test_mixed_slots_switch_to_heat_cool_then_restore_scalar_mode(self):
+        program = integration.validate_program(
+            [
+                dual_slot("range", start="09:00", end="10:00", low=18, high=22),
+                climate_slot("single", start="10:00", end="11:00", temperature=21),
+            ],
+            True,
+            None,
+            "heat",
+        )
+        scheduler, hass = self.scheduler(
+            {CLIMATE: entity("heat", temperature=20)}, {CLIMATE: program}
+        )
+        original_now = CLOCK["now"]
+        try:
+            await scheduler.async_evaluate()
+            self.assertEqual(
+                hass.services.calls,
+                [
+                    ("climate", "set_hvac_mode", {"entity_id": CLIMATE, "hvac_mode": "heat_cool"}),
+                    (
+                        "climate",
+                        "set_temperature",
+                        {"entity_id": CLIMATE, "target_temp_low": 18.0, "target_temp_high": 22.0},
+                    ),
+                ],
+                "a range slot switches to heat_cool before sending both bounds",
+            )
+
+            CLOCK["now"] = original_now.replace(hour=10, minute=30)
+            hass.states.set(CLIMATE, entity("heat_cool", temperature=20, target_temp_low=18, target_temp_high=22))
+            await scheduler.async_evaluate()
+            self.assertEqual(
+                hass.services.calls[2:],
+                [
+                    ("climate", "set_hvac_mode", {"entity_id": CLIMATE, "hvac_mode": "heat"}),
+                    ("climate", "set_temperature", {"entity_id": CLIMATE, "temperature": 21.0}),
+                ],
+                "a scalar slot restores the configured mode before sending its target",
+            )
+        finally:
+            CLOCK["now"] = original_now
+
+    async def test_mixed_slots_without_scalar_mode_are_rejected_even_if_entity_is_unavailable(self):
+        program = integration.validate_program(
+            [dual_slot("range"), climate_slot("single", start="10:00", end="11:00")],
+            True,
+        )
+        scheduler, hass = self.scheduler(
+            {CLIMATE: entity("unavailable")}, {CLIMATE: program}
+        )
+        await scheduler.async_evaluate()
+        self.assertEqual(hass.services.calls, [])
+        self.assertEqual(scheduler.errors[CLIMATE]["code"], "mixed_slots_mode_required")
+
+    async def test_save_rejects_shape_errors_even_when_entity_is_unavailable(self):
+        cases = [
+            (
+                [dual_slot("range"), climate_slot("single", start="10:00", end="11:00")],
+                None,
+                None,
+                "mixed_slots_mode_required",
+            ),
+            ([dual_slot()], 17, "heat_cool", "heat_cool_unsupported"),
+        ]
+        for slots, away_temperature, hvac_mode, expected_code in cases:
+            with self.subTest(code=expected_code):
+                scheduler, _ = self.scheduler({CLIMATE: entity("unavailable")}, {})
+                with self.assertRaises(integration.ScheduleValidationError) as catch:
+                    await scheduler.async_set_program(
+                        CLIMATE, True, slots, away_temperature, hvac_mode
+                    )
+                self.assertEqual(catch.exception.code, expected_code)
+                self.assertNotIn(CLIMATE, scheduler.programs)
+
+    async def test_heat_cool_outside_target_is_rejected_without_a_service_call(self):
+        program = integration.validate_program(
+            [dual_slot()], True, away_temperature=17, hvac_mode="heat_cool"
+        )
+        scheduler, hass = self.scheduler(
+            {CLIMATE: entity("heat_cool", target_temp_low=18, target_temp_high=22)},
+            {CLIMATE: program},
+        )
+        await scheduler.async_evaluate()
+        self.assertEqual(hass.services.calls, [])
+        self.assertEqual(scheduler.errors[CLIMATE]["code"], "heat_cool_unsupported")
+
     async def test_out_of_range_target_records_an_error_and_the_loop_continues(self):
         # Two entities: the first has a target outside the entity limits. The
         # validation error must be recorded for it *and* the second entity must
