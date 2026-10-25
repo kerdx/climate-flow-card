@@ -1,1 +1,1 @@
-{"type":"module","scripts":{"test":"node --test"}}
+{"type":"module","scripts":{"test":"node --test"},"devDependencies":{"jsdom":"^30.1.3"}}

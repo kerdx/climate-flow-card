@@ -337,9 +337,12 @@ class Scheduler:
                             _validate_dual_target(state, target[0], target[1], _effective_mode(state, mode))
                         else:
                             _validate_climate_target(state, [target], mode, step_override)
-                except HomeAssistantError as err:
+                except (ScheduleError, HomeAssistantError) as err:
                     # A permanent validation failure is retried on config/state change,
-                    # but not on every minute tick.
+                    # but not on every minute tick. ScheduleError is raised by the
+                    # pure validators (limits, step, mode/slot pairing); catching only
+                    # HomeAssistantError here would abort the whole evaluation for
+                    # every later entity in the loop.
                     self.pending.discard(entity_id)
                     self.applied_slot[entity_id] = apply_key
                     self._set_error(entity_id, getattr(err, "code", None) or "entity_validation_failed", str(err), log=True)

@@ -163,9 +163,15 @@ def validate_target(target: Any, minimum: Any, maximum: Any, step: Any) -> float
 
 
 def validate_single_target_mode(state_mode: Any, attribute_mode: Any = None) -> None:
-    """Reject climate modes that cannot safely accept a single temperature."""
+    """Reject climate modes that cannot safely accept a single temperature.
+
+    ``heat_cool`` itself is schedulable; what it cannot take is one scalar, so
+    this guard fires for a single-temperature slot, the outside-schedule
+    temperature, an override or a pause whenever heat_cool is the effective
+    mode.
+    """
     if state_mode == "heat_cool" or attribute_mode == "heat_cool":
-        raise ScheduleError("Schedules do not support heat_cool mode", "heat_cool_unsupported")
+        raise ScheduleError("A single target cannot be applied while heat_cool is active; both target temperatures are required", "heat_cool_unsupported")
 
 
 def slot_is_dual(slot: Any) -> bool:

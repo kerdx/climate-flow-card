@@ -81,7 +81,7 @@
       "message": "Target {value} is not aligned to the climate temperature step."
     },
     "heat_cool_unsupported": {
-      "message": "Schedules do not support the heat_cool mode."
+      "message": "A single target cannot be applied while the climate runs heat_cool; both target temperatures are required."
     },
     "heat_cool_dual_required": {
       "message": "A heat_cool program needs both temperatures in every slot."

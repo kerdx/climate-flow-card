@@ -129,7 +129,7 @@ const STRINGS = {
       climate_range_invalid: 'The climate temperature range or step is invalid.',
       target_outside_limits: 'Target {value} is outside the climate limits.',
       target_off_step: 'Target {value} is not aligned to the climate temperature step.',
-      heat_cool_unsupported: 'Schedules do not support the heat_cool mode.',
+      heat_cool_unsupported: 'A single target cannot be applied while the climate runs heat_cool; both target temperatures are required.',
       heat_cool_dual_required: 'A heat_cool program needs both temperatures in every slot.',
       dual_range_invalid: 'The low target {low} must stay below the high target {high}.',
       dual_slot_unsupported: 'A slot with two target temperatures needs heat_cool: set the program mode to heat_cool or use one temperature.',
@@ -288,7 +288,7 @@ const STRINGS = {
       climate_range_invalid: 'L\u2019intervallo o il passo temperatura del climate non è valido.',
       target_outside_limits: 'Il target {value} è fuori dai limiti del climate.',
       target_off_step: 'Il target {value} non è allineato al passo temperatura del climate.',
-      heat_cool_unsupported: 'Le pianificazioni non supportano la modalità heat_cool.',
+      heat_cool_unsupported: 'Non si può applicare un singolo target mentre il clima è in heat_cool: sono richieste entrambe le temperature.',
       heat_cool_dual_required: 'Un programma heat_cool richiede entrambe le temperature in ogni fascia.',
       dual_range_invalid: 'Il limite basso {low} deve restare sotto il limite alto {high}.',
       dual_slot_unsupported: 'Una fascia con due temperature richiede heat_cool: imposta la modalità del programma su heat_cool oppure usa una sola temperatura.',
@@ -1264,9 +1264,26 @@ export class ClimateFlowCard extends HTMLElementBase {
     else if (numeric(this.config.animation_duration) === null || numeric(this.config.animation_duration) <= 0) throw new Error('animation_duration must be a number of milliseconds greater than zero.');
     else this.config.animation_duration = normalizeAnimationDuration(this.config.animation_duration);
     if (!this.shadowRoot) this.attachShadow({ mode: 'open' });
+    // A new config opens the render gate again: repaint now and re-seal it
+    // with the signature of the freshly rendered world.
+    this._renderedSignature = null;
+    this._renderPreservingDeltaFocus();
+    this._renderedSignature = this._renderSignature();
+  }
+  set hass(hass) {
+    this._hass = hass;
+    this._reconcileOptimistic();
+    // HA hands a tick to every card on the dashboard for any state change;
+    // rebuilding the whole tree for an update that changes nothing steals
+    // focus and wastes work. The signature covers everything the DOM can
+    // show, so the rebuild waits for a real difference. Dialog edits, the
+    // +/- deltas and the optimistic preview repaint through their own paths
+    // and never pass through this gate.
+    const signature = this._renderSignature();
+    if (signature === this._renderedSignature && this.shadowRoot) return;
+    this._renderedSignature = signature;
     this._renderPreservingDeltaFocus();
   }
-  set hass(hass) { this._hass = hass; this._reconcileOptimistic(); this._renderPreservingDeltaFocus(); }
   disconnectedCallback() { clearTimeout(this._optimisticTimer); this._optimisticTimer = null; this._optimistic = null; clearTimeout(this._tapTimer); this._tapTimer = null; clearTimeout(this._holdTimer); this._holdTimer = null; clearTimeout(this._commitTimer); this._commitTimer = null; this._holdFired = false; this._lastTapAt = 0; this._detachDialDrag(); this._detachHeroDrag(); this._dragConsumed = false; }
   getCardSize() { const layout = this.config?.layout; return layout === 'circular' ? 3 : layout === 'compact' ? 2 : 1; }
   _service(domain, service, data) {
@@ -1326,6 +1343,21 @@ export class ClimateFlowCard extends HTMLElementBase {
     try {
       return formatRelativeTime(timestamp, Date.now(), this._hass?.locale?.language);
     } catch { return ''; }
+  }
+  _renderSignature() {
+    // Everything the DOM can reflect: the climate entity (its state, every
+    // attribute the card reads and the timestamps that age the relative
+    // chip), the programs sensor, and the locale/unit environment. The HA
+    // formatters are captured by presence: a hass that gains one repaints.
+    const entity = this._hass?.states?.[this.config?.entity];
+    const sensor = this._scheduleSensor();
+    return JSON.stringify([
+      entity?.entity_id, entity?.state, entity?.last_changed, entity?.last_updated,
+      entity?.attributes,
+      sensor?.entity_id, sensor?.state, sensor?.last_changed, sensor?.attributes,
+      this._hass?.locale?.language, this._hass?.config?.unit_system?.temperature,
+      typeof this._hass?.formatEntityState, typeof this._hass?.formatEntityAttributeValue,
+    ]);
   }
   _render() {
     if (!this.shadowRoot || !this.config) return;
@@ -1784,11 +1816,13 @@ export class ClimateFlowCard extends HTMLElementBase {
     if (plan.hero === 'target' && hasTarget) {
       heroNumber.textContent = model.dual ? `${formatNumber(model.low, locale)}–${formatNumber(model.high, locale)}` : formatNumber(model.value, locale);
       heroUnit.textContent = unit;
-      sub.textContent = plan.chip === 'current' && currentValue !== null ? currentDisplay : '';
+      // The secondary line is the other temperature, gated by the same switch
+      // the pill and compact layouts use for their secondary value.
+      sub.textContent = c.show_current_temperature_chip && plan.chip === 'current' && currentValue !== null ? currentDisplay : '';
     } else if (plan.hero === 'current' && currentDisplay) {
       heroNumber.textContent = currentDisplay.replace(` ${unit}`, '');
       heroUnit.textContent = unit;
-      sub.textContent = hasTarget ? targetLabel : '';
+      sub.textContent = c.show_current_temperature_chip && hasTarget ? targetLabel : '';
     } else {
       heroNumber.textContent = '—';
       heroUnit.textContent = '';
@@ -1910,7 +1944,10 @@ export class ClimateFlowCard extends HTMLElementBase {
     } else {
       const statusline = document.createElement('div'); statusline.className = 'statusline';
       const stLabel = document.createElement('span'); stLabel.textContent = t.nextChange;
-      const stValue = document.createElement('span'); stValue.className = 'chip'; stValue.textContent = program?.next_change || t.none;
+      const stValue = document.createElement('span'); stValue.className = 'chip';
+      // The sensor carries an ISO boundary; show it as a local date/time like
+      // every other future timestamp in the card, never the raw string.
+      stValue.textContent = program?.next_change ? formatOverrideExpiry(program.next_change, this._hass?.locale?.language) || t.none : t.none;
       statusline.append(stLabel, stValue);
       if (program?.active_slot_id) { const act = document.createElement('span'); act.textContent = t.active(program.active_slot_id); statusline.append(act); }
       body.append(statusline);

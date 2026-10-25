@@ -41,6 +41,7 @@ jobs:
 
       - name: Run the test suite
         run: |
+          npm ci
           npm test
           python3 -m unittest discover -s tests_backend
 

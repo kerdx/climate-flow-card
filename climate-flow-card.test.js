@@ -1517,10 +1517,9 @@ test('optimistic target model uses the service payload for single and dual targe
 test('every card rebuild restores focus on an active +/- delta and never steals it', async (t) => {
   const source = readFileSync(new URL('./custom_components/climate_flow_scheduler/www/climate-flow-card.js', import.meta.url), 'utf8');
 
-  // Static wiring: all four rebuild paths (hass tick, optimistic render, the
-  // 8s timeout and the service rollback) go through the same wrapper, so a
-  // later re-render cannot drop focus that the first one already restored.
-  assert.match(source, /set hass\(hass\) \{ this\._hass = hass; this\._reconcileOptimistic\(\); this\._renderPreservingDeltaFocus\(\); \}/);
+  // Static wiring: all rebuild paths go through the same wrapper, and the
+  // hass gate returns before touching the DOM only when nothing changed.
+  assert.match(source, /const signature = this\._renderSignature\(\);\s+if \(signature === this\._renderedSignature && this\.shadowRoot\) return;\s+this\._renderedSignature = signature;\s+this\._renderPreservingDeltaFocus\(\);/);
   const cardStart = source.indexOf('export class ClimateFlowCard extends');
   const configStart = source.indexOf('  setConfig(config) {', cardStart);
   const hassStart = source.indexOf('  set hass(hass)', configStart);
@@ -1580,7 +1579,18 @@ test('every card rebuild restores focus on an active +/- delta and never steals 
   assert.deepEqual(kept.order, restored);
   await flush();
   kept.order.length = 0;
+  // The first tick through the setter repaints and seals the gate (HA hands
+  // hass over right after setConfig), then identical ticks do nothing at all.
+  const firstEntity = kept.card._hass.states['climate.living_room'];
+  kept.card.hass = { ...kept.card._hass, states: { 'climate.living_room': { ...firstEntity, attributes: { ...firstEntity.attributes, temperature: 21.5 } } } };
+  assert.deepEqual(kept.order, restored, 'a changed tick repaints and restores the delta focus');
+  kept.order.length = 0;
   kept.card.hass = { ...kept.card._hass, states: { ...kept.card._hass.states } };
+  assert.deepEqual(kept.order, [], 'an idle tick skips the rebuild entirely');
+  kept.order.length = 0;
+  // A tick that really changes the entity repaints and restores the delta.
+  const liveEntity = kept.card._hass.states['climate.living_room'];
+  kept.card.hass = { ...kept.card._hass, states: { 'climate.living_room': { ...liveEntity, attributes: { ...liveEntity.attributes, temperature: 20.5 } } } };
   assert.deepEqual(kept.order, restored, 'hass update restores the delta focus');
   kept.order.length = 0;
   timers[0].fn();
@@ -1617,8 +1627,9 @@ test('every card rebuild restores focus on an active +/- delta and never steals 
   keptLive.card.hass = { ...keptLive.card._hass, states: { ...keptLive.card._hass.states } };
   assert.deepEqual(keptLive.order, ['activeElement', 'activeElement', 'render', 'activeElement']);
 
-  // Focus already moved outside the card: the restore must not steal it back,
-  // while focus dropped to the document body is still handed to the delta.
+  // Focus already moved outside the card: the restore must not steal it back.
+  // If a real entity update later rebuilds the tree while focus has fallen to
+  // the document body, the captured delta is restored.
   const body = {};
   globalThis.document = { body, activeElement: { id: 'somewhere-else' } };
   try {
@@ -1628,7 +1639,8 @@ test('every card rebuild restores focus on an active +/- delta and never steals 
     assert.deepEqual(outside.order, ['activeElement', 'activeElement', 'render', 'activeElement']);
     globalThis.document.activeElement = body;
     outside.order.length = 0;
-    outside.card.hass = { ...outside.card._hass, states: { ...outside.card._hass.states } };
+    const entity = outside.card._hass.states['climate.living_room'];
+    outside.card.hass = { ...outside.card._hass, states: { 'climate.living_room': { ...entity, attributes: { ...entity.attributes, temperature: 21.5 } } } };
     assert.deepEqual(outside.order, restored);
   } finally { delete globalThis.document; }
 
@@ -1645,6 +1657,23 @@ test('every card rebuild restores focus on an active +/- delta and never steals 
   assert.equal(plain.card._focusedDelta(), null);
   plain.card._restoreDeltaFocus(null);
   assert.deepEqual(plain.order, ['activeElement']);
+});
+
+test('the heat_cool_unsupported text describes the single-target case it reports', () => {
+  // Regression: the wording dates from when the scheduler rejected the mode
+  // outright; it now fires only when ONE target meets heat_cool, so the old
+  // "schedules do not support heat_cool" phrasing contradicted the docs.
+  const cardSource = readFileSync(new URL('./custom_components/climate_flow_scheduler/www/climate-flow-card.js', import.meta.url), 'utf8');
+  const backendSource = readFileSync(new URL('./custom_components/climate_flow_scheduler/schedule.py', import.meta.url), 'utf8');
+  assert.doesNotMatch(backendSource, /do not support the heat_cool/);
+  assert.match(backendSource, /A single target cannot be applied while heat_cool is active; both target temperatures are required/);
+  assert.match(cardSource, /heat_cool_unsupported: 'A single target cannot be applied while the climate runs heat_cool/);
+  assert.doesNotMatch(cardSource, /do not support the heat_cool/);
+  for (const file of ['en', 'it']) {
+    const { exceptions } = JSON.parse(readFileSync(new URL(`./custom_components/climate_flow_scheduler/translations/${file}.json`, import.meta.url), 'utf8'));
+    assert.doesNotMatch(exceptions.heat_cool_unsupported.message, /do not support the heat_cool|non supportano la modalità heat_cool/);
+    assert.match(exceptions.heat_cool_unsupported.message, /single target|singolo target/i);
+  }
 });
 
 test('errorLabel translates backend error codes with context placeholders', () => {

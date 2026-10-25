@@ -17,7 +17,9 @@ save_program:
         boolean:
     slots:
       name: Time slots
-      description: Weekly slots. Each slot requires id, days (1 Monday to 7 Sunday), start and end (HH:MM), and exactly one target form: temperature, or target_temp_low with target_temp_high for heat_cool.
+      description: >-
+        Weekly slots. Each slot requires id, days (1 Monday to 7 Sunday), start and end (HH:MM), and exactly one target form:
+        temperature, or target_temp_low with target_temp_high for heat_cool.
       required: true
       example: '[{"id":"weekday-morning","days":[1,2,3,4,5],"start":"06:30","end":"08:00","temperature":20}]'
     away_temperature:

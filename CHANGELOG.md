@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.7.1
+
+- Avoid rebuilding the card on Home Assistant updates that do not change anything it displays, reducing unnecessary work and preserving focus. Relevant climate/scheduler state, locale, units and aging timestamps still trigger a refresh.
+- Fix circular-layout secondary temperature visibility so `show_current_temperature_chip` is respected, and format the schedule's next-change timestamp as a localized date/time instead of exposing its raw ISO value.
+- Keep schedule evaluation running for other climate entities when one entity's target validation fails; record the validation error on the affected entity. Clarify the localized `heat_cool` error: single targets are unsupported in that mode, while dual targets are required.
+- Add jsdom interaction tests for the circular dial and schedule range editor, end-to-end scheduler evaluation tests, and install the test dependency in CI. Correct the YAML syntax in the `save_program` service description.
+
 ## v1.7.0
 
 - Slots accept both target forms: either one `temperature`, or `target_temp_low` + `target_temp_high` for heat_cool. The key set is exact in both shapes, mixed slots are allowed in the same program, both bounds are validated on the entity grid (limits, step, low strictly below high), and the overlap rules are unchanged. Stored programs keep working as they are; no migration.

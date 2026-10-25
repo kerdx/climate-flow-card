@@ -81,7 +81,7 @@
       "message": "Il target {value} non è allineato al passo temperatura del climate."
     },
     "heat_cool_unsupported": {
-      "message": "Le pianificazioni non supportano la modalità heat_cool."
+      "message": "Non si può applicare un singolo target mentre il clima è in heat_cool: sono richieste entrambe le temperature."
     },
     "heat_cool_dual_required": {
       "message": "Un programma heat_cool richiede entrambe le temperature in ogni fascia."
