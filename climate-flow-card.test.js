@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { ClimateFlowCard, ClimateFlowCardEditor, CLIMATE_FLOW_CARD_TAG, CLIMATE_FLOW_CARD_EDITOR_TAG, registerClimateFlowElements, isClimateFlowElementsRegistered, isHomeAssistantFrontendReady, scheduleClimateFlowReregistration, clampTarget, temperaturePayload, targetModel, hvacToggleMode, scheduleDraft, validateScheduleDraft, defaultCardConfig, configSchema, configSchemaFields, getEntitySuggestion, sameCardConfig, errorLabel, effectiveStep, normalizeLayout, isClimateActive, isScheduleEnabled, awayTemperaturePayload, schedulableModes, manualOverrideServicePayload, overrideDurationChoices, formatOverrideExpiry, overrideFocusSelector,
-  pauseServicePayload, pauseDurationChoices, activePause, PAUSE_DURATIONS, climateStatusKey, statusLabel, modeLabel, resolveLanguage, cardStrings, fieldLabel, pickEntityTimestamp, formatRelativeTime, formatNumber, pillStatusParts, currentTemperatureDisplay } from './custom_components/climate_flow_scheduler/www/climate-flow-card.js';
+  pauseServicePayload, pauseDurationChoices, activePause, PAUSE_DURATIONS, climateStatusKey, statusLabel, modeLabel, resolveLanguage, cardStrings, fieldLabel, pickEntityTimestamp, formatRelativeTime, formatNumber, pillStatusParts, currentTemperatureDisplay, CARD_SURFACES, normalizeAccentColor, normalizeSurface, sliderFillPercent, paintSliderFill } from './custom_components/climate_flow_scheduler/www/climate-flow-card.js';
 
 test('module imports without browser DOM and exports the card class', () => {
   assert.equal(typeof ClimateFlowCard, 'function');
@@ -39,10 +39,12 @@ test('editor schema exposes climate entity and all supported visual options', ()
   const fields = configSchemaFields();
   assert.deepEqual(fields[0].selector.entity, { filter: { domain: ['climate'] } });
   const names = fields.map((entry) => entry.name);
-  for (const name of ['entity', 'name', 'icon', 'layout', 'step', 'show_state_chip', 'show_current_temperature_chip', 'show_humidity_chip', 'show_unavailable_badge', 'show_mode_buttons', 'show_step_controls', 'show_schedule_button']) assert.ok(names.includes(name));
+  for (const name of ['entity', 'name', 'icon', 'layout', 'accent_color', 'surface', 'step', 'show_state_chip', 'show_current_temperature_chip', 'show_humidity_chip', 'show_unavailable_badge', 'show_mode_buttons', 'show_step_controls', 'show_schedule_button']) assert.ok(names.includes(name));
   // The native preset dropdown next to the setpoint is gone for good.
   assert.equal(names.includes('show_preset_modes'), false);
   assert.deepEqual(fields.find((entry) => entry.name === 'layout').selector, { select: { mode: 'dropdown', options: ['pill', 'compact'] } });
+  assert.deepEqual(fields.find((entry) => entry.name === 'surface').selector, { select: { mode: 'dropdown', options: CARD_SURFACES } });
+  assert.deepEqual(fields.find((entry) => entry.name === 'accent_color').selector, { color: {} });
   assert.deepEqual(defaultCardConfig('climate.living_room'), {
     entity: 'climate.living_room', layout: 'pill',
     show_state_chip: true, show_current_temperature_chip: true, show_humidity_chip: false,
@@ -206,6 +208,101 @@ const configuredCard = (config) => {
   card.setConfig(config);
   return card;
 };
+
+test('accent colour and surface options normalise, validate and reach the chrome', () => {
+  // Normalisation keeps a hand-written config from breaking the render.
+  assert.equal(normalizeAccentColor('#3F9CF4'), '#3f9cf4');
+  assert.equal(normalizeAccentColor(' #abc '), '#abc');
+  assert.equal(normalizeAccentColor('#12345'), null);
+  assert.equal(normalizeAccentColor('red'), null);
+  assert.equal(normalizeAccentColor(undefined), null);
+  assert.equal(normalizeAccentColor(42), null);
+  assert.deepEqual(CARD_SURFACES, ['default', 'elevated', 'blend']);
+  assert.equal(normalizeSurface('elevated'), 'elevated');
+  assert.equal(normalizeSurface('blend'), 'blend');
+  assert.equal(normalizeSurface('glass'), 'default');
+  assert.equal(normalizeSurface(undefined), 'default');
+  // A typo in YAML fails loudly instead of being silently ignored.
+  assert.throws(() => configuredCard({ ...defaultCardConfig('climate.living_room'), accent_color: 'red' }), /hex colour/);
+  assert.throws(() => configuredCard({ ...defaultCardConfig('climate.living_room'), surface: 'glass' }), /surface must be one of/);
+  // Accepted values are stored normalised, and an emptied editor field is dropped.
+  assert.equal(configuredCard({ ...defaultCardConfig('climate.living_room'), accent_color: '#ABCDEF' }).config.accent_color, '#abcdef');
+  assert.equal(configuredCard({ ...defaultCardConfig('climate.living_room'), surface: 'blend' }).config.surface, 'blend');
+  const emptied = configuredCard({ ...defaultCardConfig('climate.living_room'), accent_color: '', surface: '' });
+  assert.equal(Object.hasOwn(emptied.config, 'accent_color'), false);
+  assert.equal(Object.hasOwn(emptied.config, 'surface'), false);
+
+  // The chrome lands on ha-card, the element every accent rule reads from.
+  const card = configuredCard({ ...defaultCardConfig('climate.living_room'), accent_color: '#ABC', surface: 'blend' });
+  const sets = [], removed = [];
+  const recording = () => ({ style: { setProperty: (key, value) => sets.push([key, value]), removeProperty: (key) => removed.push(key) }, dataset: {} });
+  const target = recording();
+  Object.defineProperty(card, 'shadowRoot', { value: { querySelector: (selector) => (selector === 'ha-card' ? target : null) }, configurable: true });
+  card._applyCardChrome();
+  assert.deepEqual(sets, [['--climate-flow-accent-color', '#abc']]);
+  assert.equal(target.dataset.surface, 'blend');
+  // Without an override the property is removed and the surface falls back.
+  const plain = configuredCard(defaultCardConfig('climate.living_room'));
+  const plainTarget = recording();
+  Object.defineProperty(plain, 'shadowRoot', { value: { querySelector: () => plainTarget }, configurable: true });
+  plain._applyCardChrome();
+  assert.deepEqual(sets, [['--climate-flow-accent-color', '#abc']]);
+  assert.deepEqual(removed, ['--climate-flow-accent-color']);
+  assert.equal(plainTarget.dataset.surface, 'default');
+});
+
+test('compact slider fill maps the value onto the entity range', () => {
+  assert.equal(sliderFillPercent({ min: '7', max: '30', value: '7' }), 0);
+  assert.equal(sliderFillPercent({ min: '7', max: '30', value: '30' }), 100);
+  assert.equal(sliderFillPercent({ min: '7', max: '30', value: '18.5' }), 50);
+  assert.equal(sliderFillPercent({ min: '5', max: '5', value: '5' }), 100);
+  assert.equal(sliderFillPercent({ min: 'a', max: 'b', value: 'c' }), 100);
+  assert.equal(sliderFillPercent(undefined), 100);
+  const painted = [];
+  const slider = { min: '0', max: '10', value: '2.5', style: { setProperty: (key, value) => painted.push([key, value]) } };
+  paintSliderFill(slider);
+  assert.deepEqual(painted, [['--fill', '25%']]);
+  assert.equal(paintSliderFill(null), null);
+});
+
+test('compact layout carries the premium accent, surface and hero-number treatment', () => {
+  const source = readFileSync(new URL('./custom_components/climate_flow_scheduler/www/climate-flow-card.js', import.meta.url), 'utf8');
+  const compact = source.slice(source.indexOf('_renderCompact() {'), source.indexOf('_scheduleSensor() {'));
+  // Surface variants hang off the card element, keyed by data-surface.
+  assert.match(compact, /ha-card\[data-surface="elevated"\]/);
+  assert.match(compact, /ha-card\[data-surface="blend"\]/);
+  assert.match(compact, /--cf-accent:var\(--climate-flow-accent-color,var\(--primary-color\)\)/);
+  // Hero target: number and unit are separate spans, the state chip is tinted.
+  assert.match(compact, /unitText\.className='unit'/);
+  assert.match(compact, /targetText\.append\(value, unitText\)/);
+  assert.match(compact, /\.chip\.state\{/);
+  assert.match(compact, /modeLabel\(e\?\.state, t\), 'state'\)/);
+  // The icon tells idle from running, and the track is painted from the value.
+  assert.match(compact, /\.icon\[data-active="true"\]/);
+  assert.match(compact, /root\.querySelector\('\.icon'\)\.dataset\.active = String\(active\)/);
+  assert.match(compact, /--fill,50%/);
+  assert.match(compact, /paintSliderFill\(slider\)/);
+  assert.match(compact, /\.slider'\)\?\.addEventListener\('input', \(ev\) => paintSliderFill\(ev\.target\)\)/);
+  // The surface option must work in the pill layout too, otherwise the editor
+  // offers a choice that silently does nothing on the default layout.
+  const pill = source.slice(source.indexOf('_renderPill() {'), source.indexOf('_renderCompact() {'));
+  assert.match(pill, /ha-card\[data-surface="elevated"\]/);
+  assert.match(pill, /ha-card\[data-surface="blend"\]/);
+  // The shared control gates must survive the restyle.
+  assert.match(compact, /if \(c\.show_step_controls\) for \(const \[d,label,text\]/);
+  assert.match(compact, /if \(c\.show_mode_buttons && modeList\.length\)/);
+});
+
+test('editor exposes a colour picker with a theme reset and default-first segments', () => {
+  const source = readFileSync(new URL('./custom_components/climate_flow_scheduler/www/climate-flow-card.js', import.meta.url), 'utf8');
+  assert.match(source, /if \(selector\.color\) return this\._buildColor\(item, strings\)/);
+  assert.match(source, /input\.type = 'color'/);
+  assert.match(source, /this\._themeAccent\(\)/);
+  assert.match(source, /group\._options = options/);
+  assert.match(source, /const current = this\._config\[item\.name\] \?\? options\[0\]/);
+  assert.match(source, /const options = control\._options \|\| \[\]/);
+  assert.match(source, /reset\.disabled = !current/);
+});
 
 test('new card presets carry no explicit step, so the entity step stays effective', () => {
   // The preset is not an override: an absent `step` key keeps target_temp_step

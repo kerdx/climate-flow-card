@@ -77,6 +77,7 @@ const STRINGS = {
       show_state_chip: 'Show state and relative time', show_current_temperature_chip: 'Show current temperature',
       show_humidity_chip: 'Show humidity', show_unavailable_badge: 'Show unavailable badge',
        show_mode_buttons: 'Show HVAC mode selector', show_step_controls: 'Show +/- controls', show_schedule_button: 'Show schedule button',
+      accent_color: 'Accent colour', surface: 'Card surface',
     },
     modes: { heat: 'Heat', cool: 'Cool', off: 'Off', auto: 'Auto', heat_cool: 'Heat / cool', dry: 'Dry', fan_only: 'Fan only' },
     statuses: { heating: 'Heating', cooling: 'Cooling', drying: 'Drying', fan: 'Fan', idle: 'Idle', off: 'Off', preheating: 'Preheating', defrosting: 'Defrosting', heat: 'Heat', cool: 'Cool', auto: 'Auto', heat_cool: 'Heat / cool', dry: 'Dry', fan_only: 'Fan only' },
@@ -123,6 +124,7 @@ const STRINGS = {
       chips: 'Visible elements',
       controls: 'Controls and steps',
     },
+    themeColor: 'Theme',
     help: {
       entity: 'Climate entity controlled by this card.',
       name: 'Card title; defaults to the entity name.',
@@ -136,6 +138,8 @@ const STRINGS = {
       show_mode_buttons: 'HVAC mode dropdown, shown in both layouts next to the temperature controls.',
       show_step_controls: 'Show the decrease/increase arrows around the setpoint.',
        show_schedule_button: 'Show the standalone calendar pill that opens the weekly scheduler.',
+      accent_color: 'Overrides the accent colour used by the icon, chips, slider and calendar button. Empty follows the theme colour.',
+      surface: 'Card background: default follows the theme, elevated adds contrast and depth, blend drops the background for dark dashboards.',
     },
   },
   it: {
@@ -209,6 +213,7 @@ const STRINGS = {
       show_state_chip: 'Mostra stato e tempo relativo', show_current_temperature_chip: 'Mostra temperatura attuale',
       show_humidity_chip: 'Mostra umidità', show_unavailable_badge: 'Mostra badge non disponibile',
        show_mode_buttons: 'Mostra selettore modalità HVAC', show_step_controls: 'Mostra controlli +/−', show_schedule_button: 'Mostra pulsante pianificazione',
+      accent_color: 'Colore accento', surface: 'Sfondo card',
     },
     modes: { heat: 'Caldo', cool: 'Freddo', off: 'Spento', auto: 'Automatico', heat_cool: 'Caldo / freddo', dry: 'Deumidificazione', fan_only: 'Solo ventilazione' },
     statuses: { heating: 'Riscaldamento', cooling: 'Raffreddamento', drying: 'Deumidificazione', fan: 'Ventilazione', idle: 'Inattivo', off: 'Spento', preheating: 'Preriscaldamento', defrosting: 'Sbrinamento', heat: 'Caldo', cool: 'Freddo', auto: 'Automatico', heat_cool: 'Caldo / freddo', dry: 'Deumidificazione', fan_only: 'Solo ventilazione' },
@@ -252,6 +257,7 @@ const STRINGS = {
       chips: 'Elementi visibili',
       controls: 'Controlli e passi',
     },
+    themeColor: 'Tema',
     help: {
       entity: 'Entità climate controllata da questa card.',
       name: 'Titolo della card; se vuoto usa il nome dell\u2019entità.',
@@ -265,6 +271,8 @@ const STRINGS = {
       show_mode_buttons: 'Menu a tendina delle modalità HVAC, mostrato in entrambi i layout accanto ai controlli temperatura.',
       show_step_controls: 'Mostra le frecce diminuisci/aumenta attorno al setpoint.',
        show_schedule_button: 'Mostra la pillola calendario che apre la pianificazione settimanale.',
+      accent_color: 'Sovrascrive il colore accento di icona, chip, cursore e pulsante calendario. Vuoto segue il colore del tema.',
+      surface: 'Sfondo della card: default segue il tema, elevated aggiunge contrasto e profondità, blend elimina lo sfondo per le dashboard scure.',
     },
   },
 };
@@ -386,6 +394,23 @@ const valid = (v) => v !== undefined && v !== null && v !== '' && v !== 'unknown
 export const normalizeLayout = (value) => {
   if (value === undefined || value === null || value === '') return 'pill';
   return value === 'pill' ? 'pill' : value === 'compact' ? 'compact' : null;
+};
+// Card chrome: an optional accent override plus a surface variant. Both are
+// normalised so a hand-written config degrades to the theme instead of
+// breaking the render, and both are validated eagerly in setConfig.
+export const CARD_SURFACES = ['default', 'elevated', 'blend'];
+export const normalizeAccentColor = (value) => (typeof value === 'string' && /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(value.trim()) ? value.trim().toLowerCase() : null);
+export const normalizeSurface = (value) => (CARD_SURFACES.includes(value) ? value : 'default');
+// The compact slider paints its track with a gradient, so the current value
+// has to reach the CSS as a percentage of the entity's own range.
+export const sliderFillPercent = (slider) => {
+  const min = Number(slider?.min), max = Number(slider?.max), value = Number(slider?.value);
+  if (!Number.isFinite(min) || !Number.isFinite(max) || !Number.isFinite(value) || max <= min) return 100;
+  return Math.min(100, Math.max(0, ((value - min) / (max - min)) * 100));
+};
+export const paintSliderFill = (slider) => {
+  if (slider?.style?.setProperty) slider.style.setProperty('--fill', `${sliderFillPercent(slider)}%`);
+  return slider;
 };
 export const isClimateActive = (entityOrState) => {
   const state = typeof entityOrState === 'string' ? entityOrState : entityOrState?.state;
@@ -534,6 +559,8 @@ export const configSchema = [
     field('name', { text: {} }),
     field('icon', { icon: {} }),
     field('layout', { select: { mode: 'dropdown', options: ['pill', 'compact'] } }),
+    field('accent_color', { color: {} }),
+    field('surface', { select: { mode: 'dropdown', options: CARD_SURFACES } }),
   ]),
   grid('chips', ['show_state_chip', 'show_current_temperature_chip', 'show_humidity_chip', 'show_unavailable_badge'].map((name) => field(name, { boolean: {} }))),
   // Advanced controls are grouped separately: new presets omit step so the
@@ -580,6 +607,12 @@ const EDITOR_CSS = `
   .ed-seg button{font:inherit;font-size:13px;font-weight:600;color:var(--secondary-text-color);background:transparent;border:0;border-radius:999px;padding:6px 16px;cursor:pointer}
   .ed-seg button[aria-pressed="true"]{background:var(--climate-flow-accent-color,var(--primary-color));color:var(--text-primary-color,#fff)}
   .ed-seg button:focus-visible{outline:2px solid var(--primary-color);outline-offset:2px}
+  .ed-color{display:flex;align-items:center;gap:10px;flex:0 0 auto}
+  .ed-color input[type=color]{width:46px;height:32px;padding:2px;border:1px solid var(--divider-color);border-radius:10px;background:var(--card-background-color,var(--ha-card-background));cursor:pointer}
+  .ed-color input[type=color]:focus-visible{outline:2px solid var(--primary-color);outline-offset:1px}
+  .ed-color button{font:inherit;font-size:12px;font-weight:600;padding:7px 12px;border-radius:999px;border:1px solid var(--divider-color);background:var(--card-background-color,var(--ha-card-background));color:var(--primary-text-color);cursor:pointer}
+  .ed-color button:disabled{opacity:.45;cursor:default}
+  .ed-color button:focus-visible{outline:2px solid var(--primary-color);outline-offset:2px}
   .preview{pointer-events:none}
   @media(max-width:520px){.ed-row{flex-direction:column;align-items:stretch}.ed-input,ha-entity-picker{max-width:none}}
 `;
@@ -687,6 +720,7 @@ export class ClimateFlowCardEditor extends HTMLElementBase {
     if (selector.boolean) return this._buildSwitch(item, strings);
     if (selector.number) return this._buildStep(item, strings);
     if (selector.select) return this._buildSegmented(item, strings, selector.select.options || []);
+    if (selector.color) return this._buildColor(item, strings);
     return this._buildText(item, strings);
   }
   _buildEntity(item, strings) {
@@ -782,11 +816,15 @@ export class ClimateFlowCardEditor extends HTMLElementBase {
     group.className = 'ed-seg';
     group.setAttribute('role', 'group');
     group.setAttribute('aria-label', fieldLabel(strings, item.name));
+    // An unset choice reads as the first option, which is always the default
+    // (layout ships a value, surface ships none and starts on "default").
+    group._options = options;
+    const current = this._config[item.name] ?? options[0];
     for (const option of options) {
       const button = document.createElement('button');
       button.type = 'button';
       button.textContent = String(option);
-      button.setAttribute('aria-pressed', String(this._config[item.name] === option));
+      button.setAttribute('aria-pressed', String(current === option));
       button.addEventListener('click', () => this._setField(item.name, option));
       group.append(button);
     }
@@ -795,6 +833,37 @@ export class ClimateFlowCardEditor extends HTMLElementBase {
     this._fields = this._fields || new Map();
     this._fields.set(item.name, row);
     return row;
+  }
+  _buildColor(item, strings) {
+    const row = this._row(strings, item.name);
+    const wrap = document.createElement('span');
+    wrap.className = 'ed-color';
+    const input = document.createElement('input');
+    input.type = 'color';
+    const current = normalizeAccentColor(this._config[item.name]);
+    input.value = current || this._themeAccent();
+    input.setAttribute('aria-label', fieldLabel(strings, item.name));
+    const reset = document.createElement('button');
+    reset.type = 'button';
+    reset.textContent = strings.themeColor || 'Theme';
+    reset.disabled = !current;
+    input.addEventListener('input', () => this._setField(item.name, normalizeAccentColor(input.value)));
+    reset.addEventListener('click', () => { this._setField(item.name, undefined); input.value = this._themeAccent(); reset.disabled = true; });
+    wrap.append(input, reset);
+    row.append(wrap);
+    row._fieldControl = input;
+    row._colorReset = reset;
+    this._fields = this._fields || new Map();
+    this._fields.set(item.name, row);
+    return row;
+  }
+  _themeAccent() {
+    // Seed the picker with the active theme accent so the first pick starts
+    // from what the card already looks like.
+    try {
+      const value = typeof getComputedStyle === 'function' ? getComputedStyle(this).getPropertyValue('--primary-color') : '';
+      return normalizeAccentColor(value) || '#00a5a5';
+    } catch { return '#00a5a5'; }
   }
   _setField(name, value) {
     const next = { ...this._config };
@@ -815,8 +884,14 @@ export class ClimateFlowCardEditor extends HTMLElementBase {
       if (control.tagName === 'INPUT' && control.type === 'checkbox') {
         const checked = Boolean(this._config[name]);
         if (control.checked !== checked) control.checked = checked;
+      } else if (control.type === 'color') {
+        const accent = normalizeAccentColor(this._config[name]);
+        if (accent) control.value = accent;
+        if (row._colorReset) row._colorReset.disabled = !accent;
       } else if (control.classList?.contains('ed-seg')) {
-        for (const button of control.children) button.setAttribute('aria-pressed', String(this._config[name] === button.textContent));
+        const options = control._options || [];
+        const current = this._config[name] ?? options[0];
+        for (const button of control.children) button.setAttribute('aria-pressed', String(current === button.textContent));
       } else if (control !== active) {
         const value = this._config[name] ?? '';
         if (String(control.value ?? '') !== String(value)) control.value = value;
@@ -842,6 +917,10 @@ export class ClimateFlowCard extends HTMLElementBase {
     if (!config?.entity || !/^climate\./.test(config.entity)) throw new Error('Specify a climate entity (climate.*).');
     const layout = normalizeLayout(config.layout);
     if (!layout) throw new Error('Supported layouts are "pill" and "compact".');
+    // Cosmetic chrome is validated up front: a typo in YAML would otherwise be
+    // silently ignored, and the editor can only produce values we accept.
+    if (config.accent_color !== undefined && config.accent_color !== null && config.accent_color !== '' && !normalizeAccentColor(config.accent_color)) throw new Error('accent_color must be a hex colour like "#3f9cf4".');
+    if (config.surface !== undefined && config.surface !== null && config.surface !== '' && !CARD_SURFACES.includes(config.surface)) throw new Error(`surface must be one of ${CARD_SURFACES.join(', ')}.`);
     // An empty step (null, '' or whitespace) means "follow the entity": the
     // editor emits null when the box is cleared, and throwing there would make
     // every toggle in the card editor look broken.
@@ -851,6 +930,14 @@ export class ClimateFlowCard extends HTMLElementBase {
     this.config = { layout: 'pill', show_state_chip: true, show_current_temperature_chip: true, show_humidity_chip: false,
       show_unavailable_badge: true, show_mode_buttons: true, show_step_controls: true, show_schedule_button: true, step: 0.5, ...config, layout };
     if (stepAbsent) this.config.step = 0.5;
+    // Chrome is stored normalised (lower-case hex, known surface) so the render
+    // never re-validates, and an emptied editor field is dropped instead of
+    // being kept as an unusable value.
+    const accent = normalizeAccentColor(this.config.accent_color);
+    if (accent) this.config.accent_color = accent;
+    else delete this.config.accent_color;
+    if (this.config.surface !== undefined && this.config.surface !== null && this.config.surface !== '') this.config.surface = normalizeSurface(this.config.surface);
+    else delete this.config.surface;
     if (!this.shadowRoot) this.attachShadow({ mode: 'open' });
     this._renderPreservingDeltaFocus();
   }
@@ -903,6 +990,18 @@ export class ClimateFlowCard extends HTMLElementBase {
     if ((this._scheduleOpen || this._overrideDialogOpen) && this.shadowRoot.querySelector('dialog[open]')) return;
     if ((this.config.layout ?? 'pill') === 'compact') this._renderCompact();
     else this._renderPill();
+    this._applyCardChrome();
+  }
+  _applyCardChrome() {
+    // Accent and surface are card-wide: they live on ha-card so every rule
+    // reading the accent variable (icon, chips, slider, calendar button)
+    // picks the configured value up in both layouts without duplication.
+    const card = this.shadowRoot?.querySelector?.('ha-card');
+    if (!card) return;
+    const accent = normalizeAccentColor(this.config?.accent_color);
+    if (accent) card.style.setProperty('--climate-flow-accent-color', accent);
+    else card.style.removeProperty('--climate-flow-accent-color');
+    card.dataset.surface = normalizeSurface(this.config?.surface);
   }
   _renderPill() {
     const c = this.config, e = this._displayEntity(this._hass?.states?.[c.entity]), a = e?.attributes || {};
@@ -926,6 +1025,8 @@ export class ClimateFlowCard extends HTMLElementBase {
     this.shadowRoot.innerHTML = `<style>
       :host{display:block;color:var(--primary-text-color);font-family:var(--paper-font-body1_-_font-family,inherit)}
        ha-card{border:1px solid var(--divider-color);border-radius:var(--climate-flow-border-radius,18px);background:var(--ha-card-background,var(--card-background-color));padding:8px 10px;box-sizing:border-box;min-height:64px;display:block;overflow:hidden;cursor:pointer}ha-card:focus-visible{outline:2px solid var(--primary-color);outline-offset:2px}
+       ha-card[data-surface="elevated"]{background:color-mix(in srgb,var(--ha-card-background,var(--card-background-color)) 84%,var(--text-primary-color) 16%);border-color:color-mix(in srgb,var(--divider-color) 45%,transparent);box-shadow:0 18px 38px -26px rgba(0,0,0,.95)}
+       ha-card[data-surface="blend"]{background:transparent;border-color:transparent;box-shadow:none}
        .pill{display:flex;align-items:center;gap:10px;min-width:0}
       .icon{width:40px;height:40px;flex:0 0 40px;border-radius:50%;display:grid;place-items:center;background:var(--secondary-background-color);color:var(--secondary-text-color);border:1px solid var(--divider-color)}
       .icon[data-active="true"]{background:var(--climate-flow-accent-color,var(--primary-color));color:var(--text-primary-color,#fff);border-color:transparent}
@@ -1040,6 +1141,7 @@ export class ClimateFlowCard extends HTMLElementBase {
   _renderCompact() {
     const c = this.config, e = this._displayEntity(this._hass?.states?.[c.entity]), a = e?.attributes || {};
     const unavailable = !e || !valid(e.state);
+    const active = !unavailable && isClimateActive(e);
     const currentValue = numeric(a.current_temperature);
     const model = targetModel(e);
     const unit = this._hass?.config?.unit_system?.temperature || '°C';
@@ -1053,27 +1155,39 @@ export class ClimateFlowCard extends HTMLElementBase {
     const scheduleActive = isScheduleEnabled(this._scheduleProgram());
     this.shadowRoot.innerHTML = `<style>
       :host{display:block;color:var(--primary-text-color);font-family:var(--paper-font-body1_-_font-family,inherit)}
-      ha-card{border-radius:var(--climate-flow-border-radius,20px);background:var(--ha-card-background,var(--card-background-color));padding:8px 12px;box-sizing:border-box;min-height:88px;display:grid;grid-template-rows:36px 36px;gap:4px;overflow:hidden;cursor:pointer}ha-card:focus-visible{outline:2px solid var(--primary-color);outline-offset:2px}
-      .head,.body{display:flex;align-items:center;gap:8px;min-width:0;white-space:nowrap;overflow:hidden}
-      .body{overflow-x:auto;overflow-y:hidden}
-      .icon{width:32px;height:32px;flex:0 0 32px;border-radius:50%;display:grid;place-items:center;background:var(--climate-flow-accent-color,var(--primary-color));color:var(--text-primary-color,#fff)}
-      .icon ha-icon{--mdc-icon-size:20px}.title{font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}.chips{display:flex;gap:4px;flex:0 1 auto;min-width:0;overflow:hidden}.chip{font-size:11px;padding:4px 7px;border-radius:999px;background:var(--secondary-background-color);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:90px;flex:0 1 auto}
-      .target{font-size:20px;color:var(--primary-text-color);font-weight:600;flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis}.target strong{font:inherit}
-      input[type=range]{width:auto;flex:1 0 45px;min-width:45px;accent-color:var(--primary-color);margin:0}
-      .body button{padding:5px 6px;min-width:28px;flex:0 0 auto}.body select{width:clamp(54px,22vw,104px);max-width:104px;min-width:54px;flex:0 0 clamp(54px,22vw,104px);overflow:hidden;text-overflow:ellipsis;font:inherit;color:var(--primary-text-color);background:var(--secondary-background-color);border:0;border-radius:999px;padding:7px 5px}
-      button{font:inherit;color:var(--primary-text-color);background:var(--secondary-background-color);border:0;border-radius:999px;padding:7px 11px;cursor:pointer}.head .schedule[data-active="true"]{background:var(--climate-flow-accent-color,var(--primary-color));color:var(--text-primary-color,#fff)}button:focus-visible,input:focus-visible{outline:2px solid var(--primary-color);outline-offset:2px}.selected{background:var(--primary-color);color:var(--text-primary-color,#fff)}
-      select:focus-visible{outline:2px solid var(--primary-color);outline-offset:2px}.badge{color:var(--error-color);font-size:11px;white-space:nowrap}.empty{color:var(--secondary-text-color);overflow:hidden;text-overflow:ellipsis}
-      @media(max-width:420px){ha-card{padding:7px 9px}.head,.body{gap:4px}.target{font-size:16px}.body button{padding:4px 5px;min-width:24px}.chip{max-width:62px}}
+      ha-card{--cf-accent:var(--climate-flow-accent-color,var(--primary-color));position:relative;overflow:hidden;border:1px solid var(--divider-color);border-radius:var(--climate-flow-border-radius,20px);background:var(--ha-card-background,var(--card-background-color));padding:14px 16px;box-sizing:border-box;min-height:106px;display:grid;grid-template-rows:auto auto;gap:12px;box-shadow:0 16px 34px -26px rgba(0,0,0,.95);cursor:pointer}
+      ha-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,var(--cf-accent),transparent 70%)}
+      ha-card:focus-visible{outline:2px solid var(--cf-accent);outline-offset:2px}
+      ha-card[data-surface="elevated"]{background:color-mix(in srgb,var(--ha-card-background,var(--card-background-color)) 84%,var(--text-primary-color) 16%);border-color:color-mix(in srgb,var(--divider-color) 45%,transparent);box-shadow:0 22px 46px -30px rgba(0,0,0,.95)}
+      ha-card[data-surface="blend"]{background:transparent;border-color:transparent;box-shadow:none}
+      .head,.body{display:flex;align-items:center;gap:10px;min-width:0;white-space:nowrap;overflow:hidden}
+      .body{overflow-x:auto;overflow-y:hidden;gap:8px;padding-bottom:2px;scrollbar-width:thin}
+      .icon{width:36px;height:36px;flex:0 0 36px;border-radius:50%;display:grid;place-items:center;background:color-mix(in srgb,var(--cf-accent) 16%,transparent);color:var(--cf-accent);border:1px solid color-mix(in srgb,var(--cf-accent) 32%,transparent)}
+      .icon[data-active="true"]{background:var(--cf-accent);color:var(--text-primary-color,#fff);border-color:transparent;box-shadow:0 0 0 4px color-mix(in srgb,var(--cf-accent) 20%,transparent)}
+      .icon ha-icon{--mdc-icon-size:20px}.title{font-size:15px;font-weight:600;letter-spacing:-.01em;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}.chips{display:flex;gap:6px;flex:0 1 auto;min-width:0;overflow:hidden}.chip{font-size:11px;font-weight:600;padding:5px 9px;border-radius:999px;background:var(--secondary-background-color);color:var(--secondary-text-color);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:110px;flex:0 1 auto;border:1px solid transparent}
+      .chip.state{background:color-mix(in srgb,var(--cf-accent) 15%,transparent);color:var(--cf-accent);border-color:color-mix(in srgb,var(--cf-accent) 30%,transparent)}
+      .target{font-size:34px;line-height:1.05;color:var(--primary-text-color);font-weight:700;letter-spacing:-.03em;flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums;display:flex;align-items:baseline;gap:3px}.target strong{font:inherit}.target .unit{font-size:14px;font-weight:600;letter-spacing:0;color:var(--secondary-text-color)}
+      input[type=range]{-webkit-appearance:none;appearance:none;width:auto;flex:1 1 70px;min-width:60px;height:24px;background:transparent;margin:0;cursor:pointer}
+      input[type=range]::-webkit-slider-runnable-track{height:6px;border-radius:999px;background:linear-gradient(to right,var(--cf-accent) var(--fill,50%),var(--divider-color) var(--fill,50%))}
+      input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:16px;height:16px;margin-top:-5px;border-radius:50%;background:var(--text-primary-color,#fff);border:2px solid var(--cf-accent);box-shadow:0 2px 6px rgba(0,0,0,.4)}
+      input[type=range]::-moz-range-track{height:6px;border-radius:999px;background:linear-gradient(to right,var(--cf-accent) var(--fill,50%),var(--divider-color) var(--fill,50%))}
+      input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;background:var(--text-primary-color,#fff);border:2px solid var(--cf-accent)}
+      .body button{padding:7px 11px;flex:0 0 auto;border-radius:999px;background:var(--secondary-background-color);border:1px solid var(--divider-color);font:inherit;font-size:13px;font-weight:600}.body button[data-delta]{width:34px;height:34px;padding:0;border-radius:12px;font-size:16px}.body button:hover{color:var(--cf-accent);border-color:color-mix(in srgb,var(--cf-accent) 45%,transparent)}
+      .body select{flex:0 0 auto;width:auto;min-width:78px;max-width:130px;overflow:hidden;text-overflow:ellipsis;font:inherit;font-size:13px;font-weight:600;color:var(--cf-accent);background:color-mix(in srgb,var(--cf-accent) 12%,transparent);border:1px solid color-mix(in srgb,var(--cf-accent) 30%,transparent);border-radius:12px;padding:8px 10px;cursor:pointer}
+      button{font:inherit;color:var(--primary-text-color);background:var(--secondary-background-color);border:0;border-radius:999px;padding:7px 11px;cursor:pointer}.head .schedule{display:grid;place-items:center;flex:0 0 auto;padding:8px 10px}.head .schedule[data-active="true"]{background:var(--climate-flow-accent-color,var(--primary-color));color:var(--text-primary-color,#fff)}button:focus-visible,input:focus-visible{outline:2px solid var(--cf-accent);outline-offset:2px}.selected{background:var(--cf-accent);color:var(--text-primary-color,#fff)}
+      select:focus-visible{outline:2px solid var(--cf-accent);outline-offset:2px}.badge{color:var(--error-color);font-size:11px;white-space:nowrap;flex:0 0 auto}.empty{color:var(--secondary-text-color);overflow:hidden;text-overflow:ellipsis}
+      @media(max-width:420px){ha-card{padding:12px 12px 13px;gap:10px}.head,.body{gap:6px}.target{font-size:27px}.body button[data-delta]{width:30px;height:30px}.chip{max-width:74px}}
     </style><ha-card tabindex="0" role="group" aria-label="Tap card background to toggle heating"><div class="head"><span class="icon"><ha-icon></ha-icon></span><span class="title"></span><span class="chips"></span><button class="schedule" aria-label="Open schedule details" title="Open schedule details"><ha-icon icon="mdi:calendar-clock"></ha-icon></button></div>
        <div class="body"></div></ha-card>`;
     const root = this.shadowRoot;
     this._bindCardToggle(root.querySelector('ha-card'));
     root.querySelector('ha-card').setAttribute('aria-label', t.toggleHeating);
     root.querySelector('.icon ha-icon').setAttribute('icon', String(c.icon || a.icon || 'mdi:thermostat'));
+    root.querySelector('.icon').dataset.active = String(active);
     root.querySelector('.title').textContent = String(title);
     const chips = root.querySelector('.chips');
-    const addChip = (show, text) => { if (show && text) { const span = document.createElement('span'); span.className = 'chip'; span.textContent = String(text); chips.append(span); } };
-    addChip(c.show_state_chip && !unavailable, modeLabel(e?.state, t));
+    const addChip = (show, text, modifier = '') => { if (show && text) { const span = document.createElement('span'); span.className = modifier ? `chip ${modifier}` : 'chip'; span.textContent = String(text); chips.append(span); } };
+    addChip(c.show_state_chip && !unavailable, modeLabel(e?.state, t), 'state');
     addChip(c.show_current_temperature_chip && !unavailable, currentValue !== null ? `${currentValue}${unit}` : '');
     addChip(c.show_humidity_chip && !unavailable, numeric(a.current_humidity) !== null ? `${numeric(a.current_humidity)}%` : '');
     if (c.show_unavailable_badge && unavailable) { const b=document.createElement('span'); b.className='badge'; b.textContent=t.unavailable; chips.append(b); }
@@ -1089,20 +1203,23 @@ export class ClimateFlowCard extends HTMLElementBase {
       if (hasTarget) {
         targetText.title = model.dual ? t.targetRange(model.low, model.high, unit) : t.target(target, unit);
         const value=document.createElement('strong');
+        // The number is the hero of this layout, so the unit is its own span
+        // and can sit smaller and secondary next to it.
+        const unitText=document.createElement('span'); unitText.className='unit'; unitText.textContent=unit;
         if (model.dual) {
-          value.textContent=`${model.low}–${model.high}${unit}`;
+          value.textContent=`${model.low}–${model.high}`;
           targetText.setAttribute('aria-label', t.targetRange(model.low, model.high, unit));
         } else {
-          value.textContent=`${target}${unit}`;
+          value.textContent=`${target}`;
           targetText.setAttribute('aria-label', t.target(target, unit));
         }
-        targetText.append(value);
+        targetText.append(value, unitText);
       }
       body.append(targetText);
       if (hasTarget && model.controllable && step !== null && step > 0) {
          if (c.show_step_controls) for (const [d,label,text] of [[-step,t.decrease,'−'],[step,t.increase,'+']]) { const button=document.createElement('button'); button.dataset.delta=String(d); button.setAttribute('aria-label',label); button.textContent=text; body.append(button); }
          const slider=document.createElement('input'); slider.className='slider'; slider.type='range'; slider.setAttribute('aria-label',model.dual?t.midpoint:t.targetLabel);
-         slider.min=String(model.sliderMin); slider.max=String(model.sliderMax); slider.step=String(step); slider.value=String(target); body.append(slider);
+         slider.min=String(model.sliderMin); slider.max=String(model.sliderMax); slider.step=String(step); slider.value=String(target); body.append(slider); paintSliderFill(slider);
       }
       if (c.show_mode_buttons && modeList.length) { const select=document.createElement('select'); select.className='hvac-mode'; select.setAttribute('aria-label',t.hvacMode); for(const m of modeList){const option=document.createElement('option');option.value=String(m);option.textContent=modeLabel(m,t);select.append(option)} select.value=modeList.includes(e.state)?e.state:modeList[0]; body.append(select); }
       const program = this._scheduleProgram();
@@ -1112,6 +1229,7 @@ export class ClimateFlowCard extends HTMLElementBase {
       if (pause) { const badge=document.createElement('span'); badge.className='badge'; badge.textContent=t.pauseActive(formatOverrideExpiry(pause.until,this._hass?.locale?.language)); body.append(badge); const resume=document.createElement('button'); resume.textContent=t.resumeSchedule; resume.setAttribute('aria-label',t.resumeSchedule); resume.addEventListener('click',()=>this._service('climate_flow_scheduler','resume_program',{climate_entity:c.entity})); body.append(resume); }
     }
     this.shadowRoot.querySelector('.slider')?.addEventListener('change', (ev) => this._setTemperature(ev.target.value, e));
+    this.shadowRoot.querySelector('.slider')?.addEventListener('input', (ev) => paintSliderFill(ev.target));
     root.querySelectorAll('[data-delta]').forEach((b) => b.addEventListener('click', () => this._setTemperature(target + Number(b.dataset.delta), e)));
     root.querySelector('select.hvac-mode')?.addEventListener('change', (ev) => { if (!unavailable && modes(e).includes(ev.target.value)) this._service('climate', 'set_hvac_mode', { entity_id: c.entity, hvac_mode: ev.target.value }); });
     schedule.addEventListener('click', () => this._openSchedule());

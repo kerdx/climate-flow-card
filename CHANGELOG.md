@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.3.0
+
+- Redesigned the `compact` layout for a premium look: the setpoint is now a hero number with its own unit, the state chip is tinted with the accent, the icon glows while the entity runs, the slider track is a gradient that follows the value, controls are bordered pills, and a thin accent line runs along the top of the card. Surface, border and shadow are tuned to read well on dark themes.
+- New `accent_color` option overrides the accent colour used by the icon, chips, slider and calendar button; the editor gained a colour picker with a button to go back to the theme colour, and an invalid value fails `setConfig` instead of being ignored.
+- New `surface` option chooses the card background: `default` follows the theme, `elevated` adds contrast and depth, `blend` drops the background for dark dashboards.
+- The card URL now carries the manifest version (`/climate_flow_scheduler/climate-flow-card.js?v=<version>`), so an upgrade changes the URL and the browser downloads the updated card instead of keeping the previous module in cache (the static path is served without cache headers).
+
 ## v1.2.0
 
 - New brand icon: the thermometer placeholder is replaced by a thermometer inside a schedule loop on the teal brand gradient, shipped as `brand/icon.png` (256px) plus a new `brand/icon@2x.png` (512px) for high-resolution displays.

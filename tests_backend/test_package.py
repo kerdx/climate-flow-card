@@ -1,6 +1,7 @@
 """Packaging checks for the integration and its frontend asset."""
 
 import ast
+import importlib.util
 import json
 from collections.abc import Mapping
 from pathlib import Path
@@ -172,7 +173,7 @@ class PackageTests(unittest.TestCase):
 
         const = (ROOT / "custom_components/climate_flow_scheduler/const.py").read_text(encoding="utf-8")
         integration = (ROOT / "custom_components/climate_flow_scheduler/__init__.py").read_text(encoding="utf-8")
-        self.assertIn('FRONTEND_URL = "/climate_flow_scheduler/climate-flow-card.js"', const)
+        self.assertIn('FRONTEND_URL = f"/climate_flow_scheduler/climate-flow-card.js?v={VERSION}"', const)
         self.assertIn('StaticPathConfig("/climate_flow_scheduler", str(www_path)', integration)
         # The dashboard resource is loaded as soon as the integration is set
         # up, so it must be registered in async_setup: async_setup_entry can
@@ -184,6 +185,28 @@ class PackageTests(unittest.TestCase):
         # URL on unload would hide the card until the next HA restart.
         self.assertNotIn("remove_extra_js_url", integration)
         self.assertTrue((ROOT / "custom_components/climate_flow_scheduler/www/climate-flow-card.js").is_file())
+
+    def test_frontend_url_carries_the_manifest_version(self):
+        """The card URL must change on every release.
+
+        The static path ships without cache headers, so after an upgrade the
+        browser may keep serving the previous module unless the URL itself
+        changes. The manifest version is the bump that invalidates it.
+        """
+        with (ROOT / "custom_components/climate_flow_scheduler/manifest.json").open(encoding="utf-8") as file:
+            version = json.load(file)["version"]
+        const_path = ROOT / "custom_components/climate_flow_scheduler/const.py"
+        spec = importlib.util.spec_from_file_location("climate_flow_scheduler_const", const_path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        self.assertEqual(module.VERSION, version)
+        self.assertEqual(
+            module.FRONTEND_URL,
+            f"/climate_flow_scheduler/climate-flow-card.js?v={version}",
+        )
+        # The registered URL is the versioned one, not the bare path.
+        integration = (ROOT / "custom_components/climate_flow_scheduler/__init__.py").read_text(encoding="utf-8")
+        self.assertIn("add_extra_js_url(hass, FRONTEND_URL)", integration)
 
     # Canonical cv helpers that produce an integration CONFIG_SCHEMA, as listed
     # by hassfest's config_schema check (script/hassfest/config_schema.py).

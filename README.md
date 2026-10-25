@@ -35,6 +35,9 @@ The card is loaded by the integration itself, so it only exists once the integra
 type: custom:climate-flow-card
 entity: climate.living_room
 layout: pill # or compact
+# Optional look, both set from the card editor as well:
+# accent_color: "#3f9cf4" # accent for icon, chips, slider and calendar button; remove it to follow the theme again
+# surface: default # default | elevated (contrast and depth) | blend (no background, for dark dashboards)
 ```
 
 No legacy card-tag or layout aliases are supported.
