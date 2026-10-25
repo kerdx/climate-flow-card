@@ -580,3 +580,39 @@ test('schedule dialog gates the range switch by capability and keeps dual slots 
   assert.equal(calls[0][2].hvac_mode, 'heat_cool', 'the mode round-trips too');
   card.disconnectedCallback?.();
 });
+
+test('buttons have theme-aware hover and pressed feedback in cards, editor and dialogs', () => {
+  const activeRule = 'button:not(:disabled):not([role="slider"]):active';
+  const hoverTint = 'currentColor 8%';
+  const activeTint = 'currentColor 16%';
+  for (const layout of ['pill', 'compact', 'circular']) {
+    const { card, shadow } = build({ config: { layout } });
+    const css = shadow.querySelector('style').textContent;
+    assert.ok(css.includes(activeRule), `${layout} keeps a visible pressed state`);
+    assert.ok(css.includes(hoverTint), `${layout} has a subtle mouse-hover state`);
+    assert.ok(css.includes(activeTint), `${layout} has a stronger pressed tint`);
+    assert.ok(css.includes('button:disabled{opacity:.45;cursor:default}'), 'disabled controls stay visibly disabled');
+    card.disconnectedCallback?.();
+  }
+
+  const editor = document.createElement(source.CLIMATE_FLOW_CARD_EDITOR_TAG);
+  editor.setConfig({ entity: 'climate.living_room' });
+  const editorCss = editor.shadowRoot.querySelector('style').textContent;
+  assert.ok(editorCss.includes(hoverTint), 'editor controls use the shared hover state');
+  assert.ok(editorCss.includes(activeTint), 'editor controls use the shared pressed state');
+  editor.remove();
+
+  const scheduled = build({ programState: program([{ id: 'morning', days: [1], start: '08:00', end: '10:00', temperature: 21 }]) });
+  scheduled.card._openSchedule();
+  const scheduleCss = editorDialog(scheduled.shadow).querySelector('style').textContent;
+  assert.ok(scheduleCss.includes(hoverTint), 'schedule buttons and day pills respond to hover');
+  assert.ok(scheduleCss.includes('.days label:active .day'), 'schedule day pills respond while pressed');
+  scheduled.card.disconnectedCallback?.();
+
+  const override = build();
+  override.card._requestManualOverride(20, 0.5);
+  const overrideCss = [...override.shadow.querySelectorAll('dialog style')].at(-1).textContent;
+  assert.ok(overrideCss.includes(hoverTint), 'override buttons use the shared hover state');
+  assert.ok(overrideCss.includes(activeTint), 'override buttons use the shared pressed state');
+  override.card.disconnectedCallback?.();
+});

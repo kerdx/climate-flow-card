@@ -861,6 +861,19 @@ export const sameCardConfig = (a, b) => {
   return true;
 };
 
+// Buttons share a small theme-aware state layer so hover and press feedback is
+// visible in every layout, editor and dialog without replacing semantic fills.
+const BUTTON_FEEDBACK_CSS = `
+  button:not(:disabled):not([role="slider"]){cursor:pointer;transition:background-color .14s ease,border-color .14s ease,color .14s ease,box-shadow .14s ease}
+  @media (hover:hover) and (pointer:fine){button:not(:disabled):not([role="slider"]):hover{box-shadow:inset 0 0 0 999px color-mix(in srgb,currentColor 8%,transparent)}}
+  button:not(:disabled):not([role="slider"]):active,.days label:active .day,.range-toggle:active .day{box-shadow:inset 0 0 0 999px color-mix(in srgb,currentColor 16%,transparent);transition-duration:0s}
+  .days .day,.range-toggle .day{transition:background .15s ease,color .15s ease,box-shadow .14s ease}
+  @media (hover:hover) and (pointer:fine){.days label:hover .day,.range-toggle:hover .day{box-shadow:inset 0 0 0 999px color-mix(in srgb,currentColor 8%,transparent)}}
+  button:disabled{opacity:.45;cursor:default}
+  button:focus-visible{outline:2px solid var(--climate-flow-accent-color,var(--primary-color));outline-offset:2px}
+  @media (prefers-reduced-motion:reduce){button,.days .day,.range-toggle .day{transition:none!important}}
+`;
+
 // Editor chrome: section cards with a label/description row and the control
 // on the right, the same vocabulary as the Home Assistant sections UI.
 const EDITOR_CSS = `
@@ -894,6 +907,7 @@ const EDITOR_CSS = `
   .ed-color button:focus-visible{outline:2px solid var(--primary-color);outline-offset:2px}
   .preview{pointer-events:none}
   @media(max-width:520px){.ed-row{flex-direction:column;align-items:stretch}.ed-input,ha-entity-picker{max-width:none}}
+  ${BUTTON_FEEDBACK_CSS}
 `;
 
 export class ClimateFlowCardEditor extends HTMLElementBase {
@@ -1444,23 +1458,23 @@ export class ClimateFlowCard extends HTMLElementBase {
       .pill [hidden]{display:none!important}
        .controls{flex:0 1 auto;min-width:0;display:flex;align-items:center;gap:0;background:var(--secondary-background-color);border-radius:999px;padding:2px;max-width:42%;overflow-x:auto;overflow-y:hidden;overscroll-behavior-inline:contain;scrollbar-width:thin}
        .controls button{font:inherit;font-size:14px;color:var(--primary-text-color);background:transparent;border:0;border-radius:999px;padding:7px 10px;cursor:pointer;white-space:nowrap;flex:0 0 auto}
-      .controls button:hover{background:var(--divider-color)}
-      .controls button:focus-visible{outline:2px solid var(--primary-color);outline-offset:2px}
+       .controls button:focus-visible{outline:2px solid var(--primary-color);outline-offset:2px}
       .controls button:disabled{opacity:.45;cursor:default;background:var(--secondary-background-color)}
        .controls .setpoint{font-weight:600;min-width:58px;text-align:center;background:transparent;font-size:14px;padding:7px 2px}
        .controls select{font:inherit;font-size:13px;color:var(--primary-text-color);background:transparent;border:0;border-radius:999px;padding:7px 5px;cursor:pointer;min-width:54px;max-width:96px;overflow:hidden;text-overflow:ellipsis}
-       .controls select:focus-visible{outline:2px solid var(--primary-color);outline-offset:0}       .controls .setpoint:hover{background:transparent}
+        .controls select:focus-visible{outline:2px solid var(--primary-color);outline-offset:0}
        .controls .setpoint:focus-visible{outline-offset:0;border-radius:10px}
        .controls .setpoint{touch-action:pan-y}[role="slider"]{cursor:ew-resize}
        @keyframes cf-bump{0%{transform:translateY(3px) scale(.95);opacity:.6}60%{transform:translateY(-1px) scale(1.01);opacity:1}100%{transform:none;opacity:1}}
        .bump{animation:cf-bump var(--cf-motion,220ms) cubic-bezier(.2,.7,.3,1)}
        [data-motion="off"] *{animation:none!important;transition:none!important}
-       [data-motion="on"] button:active{transform:scale(.95)}
+        [data-motion="on"] button:not([role="slider"]):active{transform:scale(.95)}
        .schedule{display:grid;place-items:center;flex:0 0 auto;padding:8px 11px;font:inherit;color:var(--primary-text-color);background:var(--secondary-background-color);border:0;border-radius:999px;cursor:pointer}
        .schedule[data-active="true"]{background:var(--climate-flow-accent-color,var(--primary-color));color:var(--text-primary-color,#fff)}
-       .schedule:hover:not([data-active="true"]){background:var(--divider-color)}.schedule[data-active="true"]:hover{background:var(--climate-flow-accent-color,var(--primary-color))}.schedule:focus-visible{outline:2px solid var(--primary-color);outline-offset:2px}.schedule ha-icon{--mdc-icon-size:18px;display:block}
+       .schedule:focus-visible{outline:2px solid var(--primary-color);outline-offset:2px}.schedule ha-icon{--mdc-icon-size:18px;display:block}
         @media(max-width:420px){ha-card{padding:7px 8px}.pill{gap:7px}.icon{width:34px;height:34px;flex-basis:34px}.icon ha-icon{--mdc-icon-size:19px}.current{font-size:12px;padding:6px 8px}.controls button{padding:6px 7px;font-size:13px}.controls .setpoint{min-width:48px}.schedule{padding:6px 8px}}
-     </style><ha-card tabindex="0" role="group" aria-label="Tap card background to toggle heating"><div class="pill"><span class="icon"><ha-icon></ha-icon></span><div class="meta"><span class="title"></span><span class="status"></span></div><span class="current"><ha-icon></ha-icon><span></span></span><div class="controls"></div><button class="schedule" aria-label="Open schedule details" title="Open schedule details"><ha-icon icon="mdi:calendar-clock"></ha-icon></button></div></ha-card>`;
+        ${BUTTON_FEEDBACK_CSS}
+      </style><ha-card tabindex="0" role="group" aria-label="Tap card background to toggle heating"><div class="pill"><span class="icon"><ha-icon></ha-icon></span><div class="meta"><span class="title"></span><span class="status"></span></div><span class="current"><ha-icon></ha-icon><span></span></span><div class="controls"></div><button class="schedule" aria-label="Open schedule details" title="Open schedule details"><ha-icon icon="mdi:calendar-clock"></ha-icon></button></div></ha-card>`;
     const root = this.shadowRoot;
     this._bindCardToggle(root.querySelector('ha-card'));
     root.querySelector('ha-card').setAttribute('aria-label', this._actionLabel(t));
@@ -1593,7 +1607,7 @@ export class ClimateFlowCard extends HTMLElementBase {
       @keyframes cf-bump{0%{transform:translateY(3px) scale(.95);opacity:.6}60%{transform:translateY(-1px) scale(1.01);opacity:1}100%{transform:none;opacity:1}}
       .bump{animation:cf-bump var(--cf-motion,220ms) cubic-bezier(.2,.7,.3,1)}
       [data-motion="off"] *{animation:none!important;transition:none!important}
-      [data-motion="on"] button:active{transform:scale(.95)}
+       [data-motion="on"] button:not([role="slider"]):active{transform:scale(.95)}
       input[type=range]{-webkit-appearance:none;appearance:none;width:auto;flex:1 1 70px;min-width:60px;height:24px;background:transparent;margin:0;cursor:pointer}
       input[type=range]::-webkit-slider-runnable-track{height:6px;border-radius:999px;background:linear-gradient(to right,var(--cf-accent) var(--fill,50%),var(--divider-color) var(--fill,50%))}
       input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:16px;height:16px;margin-top:-5px;border-radius:50%;background:var(--text-primary-color,#fff);border:2px solid var(--cf-accent);box-shadow:0 2px 6px rgba(0,0,0,.4)}
@@ -1603,8 +1617,9 @@ export class ClimateFlowCard extends HTMLElementBase {
       .body select{flex:0 0 auto;width:auto;min-width:78px;max-width:130px;overflow:hidden;text-overflow:ellipsis;font:inherit;font-size:13px;font-weight:600;color:var(--cf-accent);background:color-mix(in srgb,var(--cf-accent) 12%,transparent);border:1px solid color-mix(in srgb,var(--cf-accent) 30%,transparent);border-radius:12px;padding:8px 10px;cursor:pointer}
       button{font:inherit;color:var(--primary-text-color);background:var(--secondary-background-color);border:0;border-radius:999px;padding:7px 11px;cursor:pointer}.head .schedule{display:grid;place-items:center;flex:0 0 auto;padding:8px 10px}.head .schedule[data-active="true"]{background:var(--climate-flow-accent-color,var(--primary-color));color:var(--text-primary-color,#fff)}button:focus-visible,input:focus-visible{outline:2px solid var(--cf-accent);outline-offset:2px}.selected{background:var(--cf-accent);color:var(--text-primary-color,#fff)}
       select:focus-visible{outline:2px solid var(--cf-accent);outline-offset:2px}.badge{color:var(--error-color);font-size:11px;white-space:nowrap;flex:0 0 auto}.empty{color:var(--secondary-text-color);overflow:hidden;text-overflow:ellipsis}
-      @media(max-width:420px){ha-card{padding:12px 12px 13px;gap:10px}.head,.body{gap:6px}.target{font-size:27px}.body button[data-delta]{width:30px;height:30px}.chip{max-width:74px}}
-    </style><ha-card tabindex="0" role="group" aria-label="Tap card background to toggle heating"><div class="head"><span class="icon"><ha-icon></ha-icon></span><span class="title"></span><span class="chips"></span><button class="schedule" aria-label="Open schedule details" title="Open schedule details"><ha-icon icon="mdi:calendar-clock"></ha-icon></button></div>
+       @media(max-width:420px){ha-card{padding:12px 12px 13px;gap:10px}.head,.body{gap:6px}.target{font-size:27px}.body button[data-delta]{width:30px;height:30px}.chip{max-width:74px}}
+       ${BUTTON_FEEDBACK_CSS}
+     </style><ha-card tabindex="0" role="group" aria-label="Tap card background to toggle heating"><div class="head"><span class="icon"><ha-icon></ha-icon></span><span class="title"></span><span class="chips"></span><button class="schedule" aria-label="Open schedule details" title="Open schedule details"><ha-icon icon="mdi:calendar-clock"></ha-icon></button></div>
        <div class="body"></div></ha-card>`;
     const root = this.shadowRoot;
     this._bindCardToggle(root.querySelector('ha-card'));
@@ -1761,9 +1776,10 @@ export class ClimateFlowCard extends HTMLElementBase {
       @keyframes cf-bump{0%{transform:translateY(3px) scale(.95);opacity:.6}60%{transform:translateY(-1px) scale(1.01);opacity:1}100%{transform:none;opacity:1}}
       .bump{animation:cf-bump var(--cf-motion,220ms) cubic-bezier(.2,.7,.3,1)}
       [data-motion="off"] *{animation:none!important;transition:none!important}
-      [data-motion="on"] button:active{transform:scale(.95)}
-      @media(max-width:420px){ha-card{padding:12px 12px 14px;gap:8px}.hero{font-size:30px}.dial{width:min(100%,196px)}.row button[data-delta]{width:30px;height:30px}}
-     </style><ha-card tabindex="0" role="group" aria-label="Tap card background to toggle heating"><div class="head"><span class="icon"><ha-icon></ha-icon></span><span class="title"></span><span class="chips"></span><button class="schedule" aria-label="Open schedule details" title="Open schedule details"><ha-icon icon="mdi:calendar-clock"></ha-icon></button></div><div class="stage"><svg class="dial" viewBox="0 0 200 200"><circle class="track" cx="100" cy="100" r="80" transform="rotate(135 100 100)"></circle><circle class="value" cx="100" cy="100" r="80" transform="rotate(135 100 100)"></circle><g class="thumbs"></g></svg><div class="center"><span class="hero"><strong></strong><span class="unit"></span></span><span class="sub"></span></div></div><div class="row"></div></ha-card>`;
+       [data-motion="on"] button:not([role="slider"]):active{transform:scale(.95)}
+       @media(max-width:420px){ha-card{padding:12px 12px 14px;gap:8px}.hero{font-size:30px}.dial{width:min(100%,196px)}.row button[data-delta]{width:30px;height:30px}}
+       ${BUTTON_FEEDBACK_CSS}
+      </style><ha-card tabindex="0" role="group" aria-label="Tap card background to toggle heating"><div class="head"><span class="icon"><ha-icon></ha-icon></span><span class="title"></span><span class="chips"></span><button class="schedule" aria-label="Open schedule details" title="Open schedule details"><ha-icon icon="mdi:calendar-clock"></ha-icon></button></div><div class="stage"><svg class="dial" viewBox="0 0 200 200"><circle class="track" cx="100" cy="100" r="80" transform="rotate(135 100 100)"></circle><circle class="value" cx="100" cy="100" r="80" transform="rotate(135 100 100)"></circle><g class="thumbs"></g></svg><div class="center"><span class="hero"><strong></strong><span class="unit"></span></span><span class="sub"></span></div></div><div class="row"></div></ha-card>`;
     const root = this.shadowRoot;
     this._bindCardToggle(root.querySelector('ha-card'));
     root.querySelector('ha-card').setAttribute('aria-label', this._actionLabel(t));
@@ -1881,8 +1897,7 @@ export class ClimateFlowCard extends HTMLElementBase {
       .dlg-head h2{margin:0;font-size:17px;font-weight:600}
       .dlg-head .dlg-sub{font-size:12px;color:var(--secondary-text-color);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
       .dlg-head .close{flex:0 0 auto;display:grid;place-items:center;width:34px;height:34px;border-radius:50%;border:0;background:var(--secondary-background-color);color:var(--primary-text-color);cursor:pointer}
-      .dlg-head .close:hover{background:var(--divider-color)}
-      .dlg-head .close ha-icon{--mdc-icon-size:18px;display:block}
+       .dlg-head .close ha-icon{--mdc-icon-size:18px;display:block}
       .dlg-body{padding:16px 22px 20px}
       .statusline{display:flex;align-items:center;gap:8px;padding:10px 14px;border-radius:14px;background:var(--secondary-background-color);font-size:13px;color:var(--secondary-text-color);margin-bottom:14px}
       .statusline .chip{font-weight:600;color:var(--primary-text-color)}
@@ -1897,7 +1912,6 @@ export class ClimateFlowCard extends HTMLElementBase {
       .slot .slot-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
       .slot h3{margin:0;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--secondary-text-color)}
       .slot .remove{border:0;background:transparent;color:var(--error-color);font:inherit;font-size:13px;font-weight:600;cursor:pointer;padding:5px 9px;border-radius:999px}
-      .slot .remove:hover{background:color-mix(in srgb,var(--error-color) 12%,transparent)}
       .days{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:10px}
       .days label{position:relative;cursor:pointer}
       .days input{position:absolute;opacity:0;width:1px;height:1px;margin:0;inset:auto}
@@ -1920,13 +1934,12 @@ export class ClimateFlowCard extends HTMLElementBase {
       .field.outside label{color:var(--primary-text-color);font-weight:600}
       .dlg-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
       .btn{font:inherit;font-size:14px;font-weight:600;color:var(--primary-text-color);background:var(--secondary-background-color);border:0;border-radius:999px;padding:9px 16px;cursor:pointer;white-space:nowrap}
-      .btn:hover{background:var(--divider-color)}
-      .btn:focus-visible{outline:2px solid var(--primary-color);outline-offset:2px}
-      .btn.primary{background:var(--climate-flow-accent-color,var(--primary-color));color:var(--text-primary-color,#fff)}
-      .btn.danger{color:var(--error-color)}
-      .btn.ghost{background:transparent}
-      .btn.ghost:hover{background:var(--secondary-background-color)}
-    </style>`;
+       .btn:focus-visible{outline:2px solid var(--primary-color);outline-offset:2px}
+       .btn.primary{background:var(--climate-flow-accent-color,var(--primary-color));color:var(--text-primary-color,#fff)}
+       .btn.danger{color:var(--error-color)}
+       .btn.ghost{background:transparent}
+       ${BUTTON_FEEDBACK_CSS}
+     </style>`;
   }
   _renderScheduleDialog() {
     const t = this._strings();
@@ -2441,7 +2454,7 @@ export class ClimateFlowCard extends HTMLElementBase {
     const sliderFocus = this.shadowRoot.activeElement?.classList?.contains('slider');
     const dialog = document.createElement('dialog');
     dialog.setAttribute('aria-labelledby', 'override-title');
-    dialog.innerHTML = `<style>dialog{color:var(--primary-text-color);background:var(--card-background-color,var(--ha-card-background));border:0;border-radius:18px;padding:20px;max-width:min(420px,calc(100vw - 40px));box-shadow:0 12px 40px rgba(0,0,0,.35)}dialog::backdrop{background:rgba(0,0,0,.55)}fieldset{border:0;padding:0;margin:0}legend{font-weight:600;margin-bottom:12px}.choices{display:grid;gap:8px}.choices button,.cancel{font:inherit;color:var(--primary-text-color);background:var(--secondary-background-color);border:0;border-radius:12px;padding:10px 14px;text-align:left;cursor:pointer}.choices button:focus-visible,.cancel:focus-visible{outline:2px solid var(--primary-color);outline-offset:2px}.error{color:var(--error-color);min-height:1.3em}</style><fieldset><legend id="override-title"></legend><div class="choices"></div><p class="error" role="alert" aria-live="assertive"></p><button class="cancel" type="button"></button></fieldset>`;
+    dialog.innerHTML = `<style>dialog{color:var(--primary-text-color);background:var(--card-background-color,var(--ha-card-background));border:0;border-radius:18px;padding:20px;max-width:min(420px,calc(100vw - 40px));box-shadow:0 12px 40px rgba(0,0,0,.35)}dialog::backdrop{background:rgba(0,0,0,.55)}fieldset{border:0;padding:0;margin:0}legend{font-weight:600;margin-bottom:12px}.choices{display:grid;gap:8px}.choices button,.cancel{font:inherit;color:var(--primary-text-color);background:var(--secondary-background-color);border:0;border-radius:12px;padding:10px 14px;text-align:left;cursor:pointer}.choices button:focus-visible,.cancel:focus-visible{outline:2px solid var(--primary-color);outline-offset:2px}.error{color:var(--error-color);min-height:1.3em}${BUTTON_FEEDBACK_CSS}</style><fieldset><legend id="override-title"></legend><div class="choices"></div><p class="error" role="alert" aria-live="assertive"></p><button class="cancel" type="button"></button></fieldset>`;
     dialog.querySelector('legend').textContent = t.overrideChoice;
     dialog.querySelector('.cancel').textContent = t.overrideCancel;
     const close = () => { this._overrideDialogOpen = false; dialog.close(); dialog.remove(); this._renderPreservingDeltaFocus(); this.shadowRoot.querySelector(overrideFocusSelector(sliderFocus, deltaFocus))?.focus?.(); };
