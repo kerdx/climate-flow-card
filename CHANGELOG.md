@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.6.0
+
+- New `circular` layout: a round SVG dial whose 270° arc, thumb(s) and centre number follow the target. The dial is draggable like the other layouts' heroes (6 px threshold, one step every 12 px, clamped to the entity limits, a single batched `set_temperature` on release, retries before the optimistic rollback, and an aborted gesture restores the real value); arrow keys and the +/- controls are unchanged, and `getCardSize` reports 3.
+- `heat_cool` dials carry two thumbs: the pointer grabs the nearer bound and moves it alone, keeping one step between low and high inside the entity limits, and commits an explicit `target_temp_low`/`target_temp_high` payload through the same optimistic path (so a failed call still rolls back).
+- The dial reuses the shared rules of the other layouts: `main_temperature` decides which number sits in the centre (with `current` the dial keeps its arc but stops being a slider and opens the entity details), `accent_color`/mode accents colour the arc, `surface`, `animations`/`animation_duration` and `haptics` all apply, and the state chip, humidity, unavailable badge, schedule button, override/pause badges and HVAC selector are all there.
+
 ## v1.5.0
 
 - Fix the card editor showing every toggle as switched off (the schedule calendar, HVAC selector, +/- controls, haptics and animations included) while the card rendered them active: the field sync read the stripped config, which only carries non-default values, instead of resolving the effective value.

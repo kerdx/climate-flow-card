@@ -34,7 +34,7 @@ The card is loaded by the integration itself, so it only exists once the integra
 ```yaml
 type: custom:climate-flow-card
 entity: climate.living_room
-layout: pill # or compact
+layout: pill # or compact | circular (round dial)
 # Optional look, both set from the card editor as well:
 # accent_color: "#3f9cf4" # accent for icon, chips, slider and calendar button; remove it to follow the theme again
 # surface: default # default | elevated (contrast and depth) | blend (no background, for dark dashboards)
@@ -52,6 +52,8 @@ layout: pill # or compact
 # animation_duration: 220 # milliseconds for the value animation
 # The target number is draggable (drag to adjust, arrow keys work too) and
 # slider/drag/arrow commits are batched into a single service call.
+# With layout: circular the dial itself is the control: dragging it moves the
+# target, and on a heat_cool entity it grabs the nearer of the two bounds.
 ```
 
 No legacy card-tag or layout aliases are supported.

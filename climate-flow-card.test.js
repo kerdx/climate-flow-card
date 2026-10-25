@@ -5,7 +5,9 @@ import { ClimateFlowCard, ClimateFlowCardEditor, CLIMATE_FLOW_CARD_TAG, CLIMATE_
   pauseServicePayload, pauseDurationChoices, activePause, PAUSE_DURATIONS, climateStatusKey, statusLabel, modeLabel, resolveLanguage, cardStrings, fieldLabel, pickEntityTimestamp, formatRelativeTime, formatNumber, pillStatusParts, currentTemperatureDisplay, CARD_SURFACES, normalizeAccentColor, normalizeSurface, sliderFillPercent, paintSliderFill, CARD_ACTIONS, normalizeCardAction, MODE_ACCENTS, modeAccentColor, cardLanguage, mainTemperatureKind, CARD_OPTION_DEFAULTS, cardDefault, stripCardDefaults, heroTemperaturePlan,
   HAPTIC_STYLES, HAPTIC_PATTERNS, hapticPattern, normalizeHapticStyle, vibrateSupported, fireHaptic,
   ANIMATION_DURATION_DEFAULT, normalizeAnimationDuration, COMMIT_DEBOUNCE_MS, COMMIT_RETRY_MS, COMMIT_RETRIES,
-  DRAG_THRESHOLD_PX, DRAG_STEP_PX, dragStepValue } from './custom_components/climate_flow_scheduler/www/climate-flow-card.js';
+  DRAG_THRESHOLD_PX, DRAG_STEP_PX, dragStepValue,
+  DIAL_SWEEP, DIAL_START_ANGLE, DIAL_RADIUS, DIAL_DRAG_THRESHOLD_PX,
+  dialFraction, dialAngle, dialPoint, dialArc, dialFractionFromAngle, dialValueFromPointer, dialBoundValue } from './custom_components/climate_flow_scheduler/www/climate-flow-card.js';
 
 test('module imports without browser DOM and exports the card class', () => {
   assert.equal(typeof ClimateFlowCard, 'function');
@@ -45,7 +47,7 @@ test('editor schema exposes climate entity and all supported visual options', ()
   for (const name of ['entity', 'name', 'icon', 'layout', 'accent_color', 'surface', 'step', 'show_state_chip', 'show_current_temperature_chip', 'show_humidity_chip', 'show_unavailable_badge', 'show_mode_buttons', 'show_step_controls', 'show_schedule_button']) assert.ok(names.includes(name));
   // The native preset dropdown next to the setpoint is gone for good.
   assert.equal(names.includes('show_preset_modes'), false);
-  assert.deepEqual(fields.find((entry) => entry.name === 'layout').selector, { select: { mode: 'dropdown', options: ['pill', 'compact'] } });
+  assert.deepEqual(fields.find((entry) => entry.name === 'layout').selector, { select: { mode: 'dropdown', options: ['pill', 'compact', 'circular'] } });
   assert.deepEqual(fields.find((entry) => entry.name === 'surface').selector, { select: { mode: 'dropdown', options: CARD_SURFACES } });
   assert.deepEqual(fields.find((entry) => entry.name === 'accent_color').selector, { color: {} });
   assert.deepEqual(defaultCardConfig('climate.living_room'), {
@@ -80,7 +82,7 @@ test('no preset dropdown remains and localized override actions exist', () => {
   assert.match(source, /resume_program/);
   assert.doesNotMatch(source, /globalThis\.prompt|window\.prompt/);
   assert.match(source, /dialog\.showModal\(\)/);
-  assert.equal((source.match(/overrideActive\(formatOverrideExpiry\(/g) || []).length, 2, 'override expiry is visible in both layouts');
+  assert.equal((source.match(/overrideActive\(formatOverrideExpiry\(/g) || []).length, 3, 'override expiry is visible in every layout');
   assert.match(source, /_showServiceError\(error\)/);
   assert.match(source, /dualOverrideUnsupported/);
 });
@@ -329,7 +331,7 @@ test('actions, mode accents, language and main temperature are wired in both lay
   assert.match(source, /normalizeCardAction\(this\.config\.tap_action, 'toggle'\)/);
   assert.match(source, /this\._holdFired\s*=\s*true/);
   // The aria-label tells what the background does instead of assuming toggle.
-  assert.equal((source.match(/_actionLabel\(t\)/g) || []).length, 2, 'both layouts label the card by its tap action');
+  assert.equal((source.match(/_actionLabel\(t\)/g) || []).length, 3, 'every layout labels the card by its tap action');
   // The mode accent only fills in when no explicit accent is configured.
   assert.match(source, /normalizeAccentColor\(this\.config\?\.accent_color\) \|\| modeAccentColor\(/);
   // main_temperature drives the hero slot of each layout, with the shared
@@ -395,6 +397,82 @@ test('haptics, motion and drag helpers normalise without a vibration API', () =>
     assert.equal(cardDefault(name, 'climate.living_room'), CARD_OPTION_DEFAULTS[name], name);
     assert.ok(configSchemaFields().some((entry) => entry.name === name), `${name} is exposed in the editor`);
     for (const lang of ['en', 'it']) assert.ok(cardStrings(lang).help[name], `${lang} help for ${name}`);
+  }
+});
+
+test('dial geometry maps values onto the 270° sweep and back', () => {
+  // The dial is the only layout whose position is an angle, so the mapping
+  // value ↔ fraction ↔ point is pure math worth pinning down exactly.
+  assert.equal(DIAL_START_ANGLE, 135);
+  assert.equal(DIAL_SWEEP, 270);
+  assert.equal(DIAL_RADIUS, 80);
+  assert.equal(DIAL_DRAG_THRESHOLD_PX, 6);
+  assert.equal(dialFraction(18.5, 7, 30), (18.5 - 7) / 23);
+  assert.equal(dialFraction(7, 7, 30), 0);
+  assert.equal(dialFraction(30, 7, 30), 1);
+  assert.equal(dialFraction(50, 7, 30), 1, 'a value past the maximum clamps');
+  assert.equal(dialFraction(0, 7, 30), 0, 'a value below the minimum clamps');
+  assert.equal(dialFraction(20, 30, 7), 0, 'an inverted or empty range stays at zero');
+  assert.equal(dialFraction(null, 7, 30), 0);
+  assert.equal(dialFraction(20, null, 30), 0);
+  assert.equal(dialAngle(0), 135);
+  assert.equal(dialAngle(0.5), 270);
+  assert.equal(dialAngle(1), 405);
+  assert.equal(dialAngle(-3), 135, 'out-of-range fractions clamp to the sweep');
+  assert.equal(dialAngle(null), 135);
+  // The extremes are symmetric around the bottom gap, the top of the sweep is
+  // the midpoint of the range.
+  assert.deepEqual(dialPoint(0), { x: 43.431, y: 156.569 });
+  assert.deepEqual(dialPoint(0.5), { x: 100, y: 20 });
+  assert.deepEqual(dialPoint(1), { x: 156.569, y: 156.569 });
+  // Angle back to fraction: the sweep wraps past 360°, and a tap inside the
+  // bottom gap snaps to the nearest end instead of wrapping around.
+  assert.equal(dialFractionFromAngle(135), 0);
+  assert.equal(dialFractionFromAngle(270), 0.5);
+  assert.equal(dialFractionFromAngle(45), 1);
+  assert.equal(dialFractionFromAngle(0), (360 - 135) / 270);
+  assert.equal(dialFractionFromAngle(80), 1, 'the gap snaps to the end it is nearer to');
+  assert.equal(dialFractionFromAngle(100), 0);
+  assert.equal(dialFractionFromAngle(null), null);
+  // Pointer coordinates → value, using a 200x200 rect centred at (100,100).
+  const rect = { left: 0, top: 0, width: 200, height: 200 };
+  assert.equal(dialValueFromPointer(100, 0, rect, 7, 30), 7 + 0.5 * 23, 'straight up is the middle of the range');
+  assert.equal(dialValueFromPointer(0, 100, rect, 7, 30), 7 + (45 / 270) * 23, 'nine o\'clock is a sixth of the sweep');
+  assert.equal(dialValueFromPointer(10, 10, rect, 30, 7), null, 'an inverted range has no scale');
+  assert.equal(dialValueFromPointer(100, 0, { left: 0, top: 0, width: 0, height: 0 }, 7, 30), null, 'a zero-size rect cannot be measured');
+  assert.equal(dialValueFromPointer(NaN, 0, rect, 7, 30), null);
+  // The two sides of a heat_cool range keep one step between them and stay
+  // inside the entity limits.
+  const dualEntity = { attributes: { min_temp: 5, max_temp: 30, target_temp_low: 18, target_temp_high: 22 } };
+  assert.equal(dialBoundValue(19.2, 'low', dualEntity, 0.5), 19, 'the dragged bound snaps to the step');
+  assert.equal(dialBoundValue(24, 'low', dualEntity, 0.5), 21.5, 'the low bound stops one step below the high one');
+  assert.equal(dialBoundValue(1, 'low', dualEntity, 0.5), 5, 'the low bound never passes the minimum');
+  assert.equal(dialBoundValue(20.2, 'high', dualEntity, 0.5), 20, '20.2 is nearer to 20 than to 20.5');
+  assert.equal(dialBoundValue(20.3, 'high', dualEntity, 0.5), 20.5);
+  assert.equal(dialBoundValue(15, 'high', dualEntity, 0.5), 18.5, 'the high bound stays one step above the low one');
+  assert.equal(dialBoundValue(99, 'high', dualEntity, 0.5), 30, 'the high bound never passes the maximum');
+  assert.equal(dialBoundValue('nonsense', 'high', dualEntity, 0.5), null);
+  // The arc: a full sweep, an empty one and the segment between two bounds.
+  assert.deepEqual(dialArc(0, 1), { track: 376.991, dasharray: '376.991 502.655', dashoffset: 0 });
+  assert.deepEqual(dialArc(0, 0), { track: 376.991, dasharray: '0.000 502.655', dashoffset: 0 });
+  assert.deepEqual(dialArc(0.25, 0.75), { track: 376.991, dasharray: '188.496 502.655', dashoffset: -94.248 });
+});
+
+test('disconnecting a circular card removes its window-level drag listeners', () => {
+  const previousWindow = globalThis.window;
+  const removed = [];
+  globalThis.window = { removeEventListener: (type) => removed.push(type) };
+  try {
+    const card = configuredCard(defaultCardConfig('climate.living_room'));
+    card._dragListeners = { onMove() {}, onUp() {}, onCancel() {} };
+    card._dialDrag = { active: true };
+    card.disconnectedCallback();
+    assert.deepEqual(removed, ['pointermove', 'pointerup', 'pointercancel', 'blur']);
+    assert.equal(card._dialDrag, null);
+    assert.equal(card._dragListeners, null);
+  } finally {
+    if (previousWindow === undefined) delete globalThis.window;
+    else globalThis.window = previousWindow;
   }
 });
 
@@ -467,6 +545,27 @@ test('a batched commit coalesces the gesture, retries and rolls back at the end'
   assert.equal(timersOf(COMMIT_RETRY_MS).length, 0);
 });
 
+test('the circular layout is a first-class citizen of the config', () => {
+  const source = readFileSync(new URL('./custom_components/climate_flow_scheduler/www/climate-flow-card.js', import.meta.url), 'utf8');
+  assert.equal(normalizeLayout('circular'), 'circular');
+  assert.equal(normalizeLayout('dial'), null);
+  assert.equal(configSchemaFields().find((entry) => entry.name === 'layout').selector.select.options.includes('circular'), true);
+  // A taller card: the dial needs the vertical room the other two do not.
+  assert.equal(configuredCard({ ...defaultCardConfig('climate.living_room'), layout: 'circular' }).getCardSize(), 3);
+  assert.match(source, /Supported layouts are "pill", "compact" and "circular"\./);
+  assert.match(source, /layout: 'pill is the horizontal pill card; compact is the two-row layout; circular is the round dial\.'/);
+  assert.match(source, /layout: 'pill è la card a pillole orizzontale; compact è il layout a due righe; circular è il quadrante rotondo\.'/);
+  // The dial reuses the shared plans instead of inventing its own rules.
+  assert.match(source, /heroTemperaturePlan\(\{ hasTarget, hasCurrent: currentValue !== null, main: mainTemperatureKind\(c\.main_temperature\) \}\)/);
+  assert.match(source, /dialBoundValue\(/);
+  assert.match(source, /const previous = drag\.bound === 'low' \? drag\.low : drag\.high;[\s\S]{0,150}?if \(value === previous\) return;/);
+  assert.match(source, /disconnectedCallback\(\)[^\n]*this\._detachDialDrag\(\)/);
+  assert.match(source, /paintThumbs/);
+  // A heat_cool dial patches each bound through the optimistic payload, which
+  // is also what rolls the value back when the service call fails.
+  assert.match(source, /target_temp_low: drag\.low, target_temp_high: drag\.high \}, debounce: true/);
+});
+
 test('editor field sync resolves defaults instead of the raw config', () => {
   // The editor keeps only non-default values in its config, so a control that
   // reads the raw config back shows every default as switched off: the
@@ -502,8 +601,8 @@ test('drag, batched commit, haptics and motion are wired in both layouts', () =>
   assert.match(source, /const onCancel = \(\) => \{[\s\S]{0,400}?_renderPreservingDeltaFocus\(\);/);
   assert.match(source, /const onUp = \(\) => \{[\s\S]{0,500}?_setTemperature\(drag\.value/);
   // Both heroes are sliders while adjustable and buttons otherwise.
-  assert.equal((source.match(/this\._markHeroControl\(/g) || []).length, 2, 'hero role set in both layouts');
-  assert.equal((source.match(/this\._bindHeroControls\(/g) || []).length, 2, 'hero gestures bound in both layouts');
+  assert.equal((source.match(/this\._markHeroControl\(/g) || []).length, 3, 'hero role set in every layout');
+  assert.equal((source.match(/this\._bindHeroControls\(/g) || []).length, 3, 'hero gestures bound in every layout');
   assert.match(source, /element\.setAttribute\('role', adjustable \? 'slider' : 'button'\)/);
   assert.match(source, /adjustable && plan\.hero === 'target'/);
   // Feedback on every deliberate step or action.
@@ -511,8 +610,8 @@ test('drag, batched commit, haptics and motion are wired in both layouts', () =>
   assert.match(source, /fireHaptic\(this\.config, 'light'\)/);
   assert.match(source, /fireHaptic\(c, 'medium'\)/);
   // Motion: one gate per layout, driven by the shared chrome.
-  assert.equal((source.match(/@keyframes cf-bump/g) || []).length, 2, 'both layouts define the value animation');
-  assert.equal((source.match(/\[data-motion="off"\] \*\{animation:none!important;transition:none!important\}/g) || []).length, 2);
+  assert.equal((source.match(/@keyframes cf-bump/g) || []).length, 3, 'every layout defines the value animation');
+  assert.equal((source.match(/\[data-motion="off"\] \*\{animation:none!important;transition:none!important\}/g) || []).length, 3);
   assert.match(source, /card\.dataset\.motion = this\.config\?\.animations === false \? 'off' : 'on'/);
   assert.match(source, /card\.style\.setProperty\('--cf-motion', `\$\{normalizeAnimationDuration\(this\.config\?\.animation_duration\)\}ms`\)/);
   assert.match(source, /\.bump\{animation:cf-bump var\(--cf-motion,220ms\)/);
@@ -522,6 +621,29 @@ test('drag, batched commit, haptics and motion are wired in both layouts', () =>
   assert.match(source, /COMMIT_DEBOUNCE_MS\)/);
   assert.match(source, /attempt < COMMIT_RETRIES/);
   assert.match(source, /clearTimeout\(this\._commitTimer\)/);
+
+  // The circular layout drags the same way, reading the value from the angle
+  // instead of a vertical delta. Its gesture captures one `drag` state: a
+  // heat_cool dial has two bounds, and the pointer moves the nearest one
+  // alone, so the threshold, the arc patch and the committed payload must all
+  // go through that captured object.
+  assert.match(source, /this\._dialDrag = drag;/);
+  assert.match(source, /this\._dialDrag\.active = true;[\s\S]{0,120}?this\._dragConsumed = true;/);
+  assert.match(source, /Math\.hypot\(moveEvent\.clientX - drag\.startClientX, moveEvent\.clientY - drag\.startClientY\) < DIAL_DRAG_THRESHOLD_PX/);
+  assert.match(source, /clampTarget\(next, drag\.entity, drag\.step, this\._stepOverride\)/);
+  assert.match(source, /dialBoundValue\(next, drag\.bound, drag\.entity, drag\.step\)/);
+  assert.match(source, /if \(drag\.bound === 'low'\) drag\.low = value; else drag\.high = value;/);
+  assert.match(source, /this\._patchDial\(\{ target_temp_low: drag\.low, target_temp_high: drag\.high \}\);/);
+  assert.match(source, /this\._patchDial\(\{ temperature: value \}\);/);
+  assert.match(source, /if \(drag\.active && drag\.bound\) \{/);
+  assert.match(source, /this\._setTemperature\(null, drag\.entity, \{ payload: \{ target_temp_low: drag\.low, target_temp_high: drag\.high \}, debounce: true \}\);/);
+  assert.match(source, /this\._setTemperature\(drag\.value, drag\.entity, \{ debounce: true \}\);/);
+  assert.match(source, /const onCancelDial = \(\) => \{/);
+  // The patch merges the optimistic payload, so a pending value is never
+  // shadowed by a stale attribute while the finger is still on the dial.
+  assert.match(source, /_patchDial\(nextAttributes\) \{[\s\S]{0,400}\{ \.\.\.\(base\?\.attributes \|\| \{\}\), \.\.\.nextAttributes \}/);
+  assert.match(source, /_bindHeroControls\(hero, \{ entity: c\.entity, adjustable: heroAdjustable, dial: true \}\)/);
+  assert.match(source, /if \(active\?\.matches\?\.\('\.dial\[role="slider"\]'\)\) return '\.dial\[role="slider"\]';/);
 });
 
 test('hero slider focus survives optimistic renders for held arrow keys', () => {
@@ -1503,7 +1625,7 @@ test('vacation pause payloads, durations, and active state', () => {
   assert.match(source, /set_pause/);
   assert.match(source, /pauseServicePayload\(this\.config\.entity, pauseInput\.value, pauseDuration\.value\)/);
   // The pause must be visible in both layouts, like the manual override.
-  assert.equal((source.match(/pauseActive\(formatOverrideExpiry\(/g) || []).length, 3, 'pause badge in both layouts plus the schedule dialog');
+  assert.equal((source.match(/pauseActive\(formatOverrideExpiry\(/g) || []).length, 4, 'pause badge in every layout plus the schedule dialog');
   for (const code of ['invalid_pause_duration', 'pause_hvac_off']) {
     assert.equal(source.split(` ${code}: `).length - 1, 2, `code ${code} must be localized in both languages`);
   }

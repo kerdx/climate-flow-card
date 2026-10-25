@@ -135,7 +135,7 @@ const STRINGS = {
       entity: 'Climate entity controlled by this card.',
       name: 'Card title; defaults to the entity name.',
       icon: 'Overrides the circular status icon.',
-      layout: 'pill is the horizontal pill card; compact is the alternative two-row layout.',
+      layout: 'pill is the horizontal pill card; compact is the two-row layout; circular is the round dial.',
       step: 'Increment used by the +/- controls. Leave empty to follow the thermostat target_temp_step (0.5 as fallback).',
       show_state_chip: 'HVAC state and relative time in the status line.',
       show_current_temperature_chip: 'Measured temperature chip.',
@@ -285,7 +285,7 @@ const STRINGS = {
       entity: 'Entità climate controllata da questa card.',
       name: 'Titolo della card; se vuoto usa il nome dell\u2019entità.',
       icon: 'Sostituisce l\u2019icona circolare di stato.',
-      layout: 'pill è la card a pillole orizzontale; compact è il layout alternativo a due righe.',
+      layout: 'pill è la card a pillole orizzontale; compact è il layout a due righe; circular è il quadrante rotondo.',
       step: 'Passo dei pulsanti +/-. Vuoto per seguire il target_temp_step del termostato (0.5 come fallback).',
       show_state_chip: 'Stato HVAC e tempo relativo nella riga di stato.',
       show_current_temperature_chip: 'Chip della temperatura misurata.',
@@ -427,7 +427,7 @@ export const hvacToggleMode = (entity) => { if (!entity || !validState(entity.st
 const valid = (v) => v !== undefined && v !== null && v !== '' && v !== 'unknown' && v !== 'unavailable';
 export const normalizeLayout = (value) => {
   if (value === undefined || value === null || value === '') return 'pill';
-  return value === 'pill' ? 'pill' : value === 'compact' ? 'compact' : null;
+  return value === 'pill' || value === 'compact' || value === 'circular' ? value : null;
 };
 // Card chrome: an optional accent override plus a surface variant. Both are
 // normalised so a hand-written config degrades to the theme instead of
@@ -512,6 +512,84 @@ export const dragStepValue = (origin, deltaPx, step) => {
   const base = numeric(origin), increment = numeric(step), delta = numeric(deltaPx);
   if (base === null || increment === null || increment <= 0 || delta === null) return null;
   return base + Math.round(delta / DRAG_STEP_PX) * increment;
+};
+// Circular dial: a 270° sweep on a 200x200 viewBox, leaving the gap at the
+// bottom. Angles follow the SVG convention (0° at 3 o'clock, y grows down), so
+// the sweep runs from 135° (bottom-left) clockwise to 405° (bottom-right).
+export const DIAL_SIZE = 200;
+export const DIAL_RADIUS = 80;
+export const DIAL_START_ANGLE = 135;
+export const DIAL_SWEEP = 270;
+export const DIAL_DRAG_THRESHOLD_PX = 6;
+// Value → [0,1] position on the sweep, tolerant of a missing or inverted range.
+export const dialFraction = (value, min, max) => {
+  const v = numeric(value), lo = numeric(min), hi = numeric(max);
+  if (v === null || lo === null || hi === null || hi <= lo) return 0;
+  return Math.min(1, Math.max(0, (v - lo) / (hi - lo)));
+};
+export const dialAngle = (fraction) => {
+  const f = numeric(fraction);
+  return DIAL_START_ANGLE + Math.min(1, Math.max(0, f === null ? 0 : f)) * DIAL_SWEEP;
+};
+export const dialPoint = (fraction, radius = DIAL_RADIUS, center = DIAL_SIZE / 2) => {
+  const radians = dialAngle(fraction) * Math.PI / 180;
+  return {
+    x: Number((center + radius * Math.cos(radians)).toFixed(3)),
+    y: Number((center + radius * Math.sin(radians)).toFixed(3)),
+  };
+};
+export const dialFractionFromAngle = (angleDegrees) => {
+  const raw = numeric(angleDegrees);
+  if (raw === null) return null;
+  const offset = ((raw - DIAL_START_ANGLE) % 360 + 360) % 360;
+  if (offset <= DIAL_SWEEP) return offset / DIAL_SWEEP;
+  // Inside the bottom gap: snap to the nearer end rather than wrapping.
+  return offset - DIAL_SWEEP < 360 - offset ? 1 : 0;
+};
+// Pointer position (viewport coordinates) → the raw value under the finger.
+// The dial maps its whole min..max range onto the sweep, so both a single
+// target and each side of a heat_cool range read from the same scale.
+export const dialValueFromPointer = (clientX, clientY, rect, min, max) => {
+  const x = numeric(clientX), y = numeric(clientY), lo = numeric(min), hi = numeric(max);
+  if (x === null || y === null || lo === null || hi === null || hi <= lo) return null;
+  if (!rect || !(rect.width > 0) || !(rect.height > 0)) return null;
+  const cx = rect.left + rect.width / 2, cy = rect.top + rect.height / 2;
+  const fraction = dialFractionFromAngle(Math.atan2(y - cy, x - cx) * 180 / Math.PI);
+  if (fraction === null) return null;
+  return lo + fraction * (hi - lo);
+};
+// One side of a heat_cool range: snapped to the step, kept inside the entity
+// limits and always one step away from the other side.
+export const dialBoundValue = (value, bound, entity, step) => {
+  const attributes = entity?.attributes || {};
+  const min = numeric(attributes.min_temp), max = numeric(attributes.max_temp);
+  const low = numeric(attributes.target_temp_low), high = numeric(attributes.target_temp_high);
+  const increment = numeric(step); const v = numeric(value);
+  if (v === null) return null;
+  const snap = increment !== null && increment > 0 ? Math.round(v / increment) * increment : v;
+  const clampedMin = min === null ? -Infinity : min, clampedMax = max === null ? Infinity : max;
+  if (bound === 'low') {
+    const limitedByHigh = high === null ? snap : Math.min(snap, high - (increment && increment > 0 ? increment : 0));
+    return Number(Math.min(clampedMax, Math.max(clampedMin, limitedByHigh)).toFixed(4));
+  }
+  const limitedByLow = low === null ? snap : Math.max(snap, low + (increment && increment > 0 ? increment : 0));
+  return Number(Math.min(clampedMax, Math.max(clampedMin, limitedByLow)).toFixed(4));
+};
+// Dash values for the value arc: `start`..`end` in sweep fractions, expressed
+// as a dash pattern on the rotated circle (the track uses the same rotation).
+export const dialArc = (startFraction, endFraction) => {
+  const circumference = 2 * Math.PI * DIAL_RADIUS;
+  const track = circumference * (DIAL_SWEEP / 360);
+  const from = dialFraction(startFraction, 0, 1);
+  const to = dialFraction(endFraction, 0, 1);
+  const length = Math.max(0, (to - from) * track);
+  return {
+    track: Number(track.toFixed(3)),
+    dasharray: `${length.toFixed(3)} ${circumference.toFixed(3)}`,
+    // `|| 0` keeps a zero offset at +0: SameValue(-0, 0) is false, and the
+    // tests compare this number exactly.
+    dashoffset: Number((-from * track).toFixed(3)) || 0,
+  };
 };
 export const isClimateActive = (entityOrState) => {
   const state = typeof entityOrState === 'string' ? entityOrState : entityOrState?.state;
@@ -687,7 +765,7 @@ export const configSchema = [
     field('entity', { entity: { filter: { domain: ['climate'] } } }),
     field('name', { text: {} }),
     field('icon', { icon: {} }),
-    field('layout', { select: { mode: 'dropdown', options: ['pill', 'compact'] } }),
+    field('layout', { select: { mode: 'dropdown', options: ['pill', 'compact', 'circular'] } }),
     field('accent_color', { color: {} }),
     field('surface', { select: { mode: 'dropdown', options: CARD_SURFACES } }),
     field('language', { select: { mode: 'dropdown', options: ['auto', 'en', 'it'] } }),
@@ -1073,7 +1151,7 @@ export class ClimateFlowCard extends HTMLElementBase {
   setConfig(config) {
     if (!config?.entity || !/^climate\./.test(config.entity)) throw new Error('Specify a climate entity (climate.*).');
     const layout = normalizeLayout(config.layout);
-    if (!layout) throw new Error('Supported layouts are "pill" and "compact".');
+    if (!layout) throw new Error('Supported layouts are "pill", "compact" and "circular".');
     // Cosmetic chrome is validated up front: a typo in YAML would otherwise be
     // silently ignored, and the editor can only produce values we accept.
     if (config.accent_color !== undefined && config.accent_color !== null && config.accent_color !== '' && !normalizeAccentColor(config.accent_color)) throw new Error('accent_color must be a hex colour like "#3f9cf4".');
@@ -1129,8 +1207,8 @@ export class ClimateFlowCard extends HTMLElementBase {
     this._renderPreservingDeltaFocus();
   }
   set hass(hass) { this._hass = hass; this._reconcileOptimistic(); this._renderPreservingDeltaFocus(); }
-  disconnectedCallback() { clearTimeout(this._optimisticTimer); this._optimisticTimer = null; this._optimistic = null; clearTimeout(this._tapTimer); this._tapTimer = null; clearTimeout(this._holdTimer); this._holdTimer = null; clearTimeout(this._commitTimer); this._commitTimer = null; this._holdFired = false; this._lastTapAt = 0; this._detachHeroDrag(); this._dragConsumed = false; }
-  getCardSize() { return this.config?.layout === 'compact' ? 2 : 1; }
+  disconnectedCallback() { clearTimeout(this._optimisticTimer); this._optimisticTimer = null; this._optimistic = null; clearTimeout(this._tapTimer); this._tapTimer = null; clearTimeout(this._holdTimer); this._holdTimer = null; clearTimeout(this._commitTimer); this._commitTimer = null; this._holdFired = false; this._lastTapAt = 0; this._detachDialDrag(); this._detachHeroDrag(); this._dragConsumed = false; }
+  getCardSize() { const layout = this.config?.layout; return layout === 'circular' ? 3 : layout === 'compact' ? 2 : 1; }
   _service(domain, service, data) {
     if (!this._hass) return Promise.resolve();
     return Promise.resolve().then(() => this._hass.callService(domain, service, data)).catch((error) => {
@@ -1192,7 +1270,8 @@ export class ClimateFlowCard extends HTMLElementBase {
   _render() {
     if (!this.shadowRoot || !this.config) return;
     if ((this._scheduleOpen || this._overrideDialogOpen) && this.shadowRoot.querySelector('dialog[open]')) return;
-    if ((this.config.layout ?? 'pill') === 'compact') this._renderCompact();
+    if ((this.config.layout ?? 'pill') === 'circular') this._renderCircular();
+    else if ((this.config.layout ?? 'pill') === 'compact') this._renderCompact();
     else this._renderPill();
     this._applyCardChrome();
   }
@@ -1514,6 +1593,176 @@ export class ClimateFlowCard extends HTMLElementBase {
   _scheduleSensor() {
     return Object.values(this._hass?.states || {}).find((state) => state?.attributes?.scheduler_domain === 'climate_flow_scheduler') || null;
   }
+  _dialGeometry(model) {
+    // One shared description of the dial: the value arc plus every thumb, so
+    // the first render and the drag patches can never drift apart.
+    if (!model || !model.available) return { arc: dialArc(0, 0), thumbs: [], fractions: [] };
+    if (model.dual) {
+      const from = dialFraction(model.low, model.min, model.max);
+      const to = dialFraction(model.high, model.min, model.max);
+      return { arc: dialArc(from, to), thumbs: [dialPoint(from), dialPoint(to)], fractions: [from, to] };
+    }
+    const fraction = dialFraction(model.value, model.min, model.max);
+    return { arc: dialArc(0, fraction), thumbs: [dialPoint(fraction)], fractions: [fraction] };
+  }
+  _renderCircular() {
+    const c = this.config;
+    // The optimistic preview must land inside the model the dial is built
+    // from: computing it after targetModel() made the arc ignore a pending
+    // value on the very frame it is shown.
+    const optimistic = this._optimistic && this._optimistic.entityId === c.entity ? this._optimistic : null;
+    const e0 = this._displayEntity(this._hass?.states?.[c.entity]);
+    const e = optimistic ? { ...e0, attributes: { ...(e0?.attributes || {}), ...optimistic.payload } } : e0;
+    const a = e?.attributes || {};
+    const unavailable = !e || !valid(e.state);
+    const active = !unavailable && isClimateActive(e);
+    const currentValue = numeric(a.current_temperature);
+    const model = targetModel(e);
+    const optimisticTemperature = optimistic?.payload?.temperature ?? null;
+    const unit = this._hass?.config?.unit_system?.temperature || '°C';
+    const title = c.name || a.friendly_name || c.entity;
+    const modeList = modes(e).filter((m) => valid(m));
+    const hasTarget = !unavailable && model.available;
+    const step = effectiveStep(e, c.step, this._stepOverride);
+    const adjustable = hasTarget && model.controllable && step !== null && step > 0;
+    const locale = this._hass?.locale?.language;
+    const t = this._strings();
+    const scheduleActive = isScheduleEnabled(this._scheduleProgram());
+    const plan = heroTemperaturePlan({ hasTarget, hasCurrent: currentValue !== null, main: mainTemperatureKind(c.main_temperature) });
+    // Same rule as the other layouts: the hero is adjustable only while it
+    // carries the target. With main_temperature: current the dial keeps the
+    // arc and the thumbs (they describe the target) but stops being a slider,
+    // so nothing can be dragged through a number the dial does not move.
+    const heroAdjustable = adjustable && plan.hero === 'target';
+    const picture = c.show_entity_picture ? String(c.entity_picture || a.entity_picture || '') : '';
+    const geometry = this._dialGeometry(model);
+    this.shadowRoot.innerHTML = `<style>
+      :host{display:block;color:var(--primary-text-color);font-family:var(--paper-font-body1_-_font-family,inherit)}
+      ha-card{--cf-accent:var(--climate-flow-accent-color,var(--primary-color));position:relative;overflow:hidden;border:1px solid var(--divider-color);border-radius:var(--climate-flow-border-radius,24px);background:var(--ha-card-background,var(--card-background-color));padding:14px 16px 16px;box-sizing:border-box;display:grid;grid-template-rows:auto auto auto;gap:10px;box-shadow:0 18px 40px -28px rgba(0,0,0,.95);cursor:pointer}
+      ha-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,var(--cf-accent),transparent 70%)}
+      ha-card:focus-visible{outline:2px solid var(--cf-accent);outline-offset:2px}
+      ha-card[data-surface="elevated"]{background:color-mix(in srgb,var(--ha-card-background,var(--card-background-color)) 84%,var(--text-primary-color) 16%);border-color:color-mix(in srgb,var(--divider-color) 45%,transparent);box-shadow:0 24px 48px -30px rgba(0,0,0,.95)}
+      ha-card[data-surface="blend"]{background:transparent;border-color:transparent;box-shadow:none}
+      .head{display:flex;align-items:center;gap:10px;min-width:0;white-space:nowrap;overflow:hidden}
+      .icon{width:34px;height:34px;flex:0 0 34px;border-radius:50%;display:grid;place-items:center;background:color-mix(in srgb,var(--cf-accent) 16%,transparent);color:var(--cf-accent);border:1px solid color-mix(in srgb,var(--cf-accent) 32%,transparent)}
+      .icon[data-active="true"]{background:var(--cf-accent);color:var(--text-primary-color,#fff);border-color:transparent;box-shadow:0 0 0 4px color-mix(in srgb,var(--cf-accent) 20%,transparent)}
+      .icon ha-icon{--mdc-icon-size:19px}.icon img{width:100%;height:100%;object-fit:cover;border-radius:50%}.icon ha-icon[hidden]{display:none}
+      .title{font-size:15px;font-weight:600;letter-spacing:-.01em;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
+      .chips{display:flex;gap:6px;flex:0 1 auto;min-width:0;overflow:hidden}.chip{font-size:11px;font-weight:600;padding:5px 9px;border-radius:999px;background:var(--secondary-background-color);color:var(--secondary-text-color);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:110px;flex:0 1 auto;border:1px solid transparent}
+      .chip.state{background:color-mix(in srgb,var(--cf-accent) 15%,transparent);color:var(--cf-accent);border-color:color-mix(in srgb,var(--cf-accent) 30%,transparent)}
+      .schedule{display:grid;place-items:center;flex:0 0 auto;padding:8px 10px;border:0;border-radius:999px;background:var(--secondary-background-color);color:var(--primary-text-color);cursor:pointer}
+      .schedule[data-active="true"]{background:var(--climate-flow-accent-color,var(--primary-color));color:var(--text-primary-color,#fff)}.schedule ha-icon{--mdc-icon-size:18px;display:block}.schedule:focus-visible{outline:2px solid var(--cf-accent);outline-offset:2px}
+      .stage{position:relative;display:grid;place-items:center;min-width:0}
+      .dial{width:min(100%,240px);height:auto;aspect-ratio:1;display:block;touch-action:none;cursor:grab}.dial:focus-visible{outline:2px solid var(--cf-accent);outline-offset:4px;border-radius:50%}
+      .track,.value{fill:none;stroke-width:14;stroke-linecap:round}.track{stroke:var(--divider-color)}
+      .value{stroke:var(--cf-accent)}
+      .thumb{fill:var(--text-primary-color,#fff);stroke:var(--cf-accent);stroke-width:4}
+      .center{position:absolute;inset:0;display:grid;place-content:center;justify-items:center;gap:2px;pointer-events:none;text-align:center}
+      .hero{display:flex;align-items:baseline;justify-content:center;gap:3px;font-size:38px;font-weight:700;letter-spacing:-.03em;font-variant-numeric:tabular-nums;line-height:1.05}
+      .hero strong{font:inherit}.hero .unit{font-size:15px;font-weight:600;letter-spacing:0;color:var(--secondary-text-color)}
+      .sub{font-size:12px;color:var(--secondary-text-color);white-space:nowrap}
+      .row{display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap;min-width:0;white-space:nowrap;overflow:hidden}
+      .row button{padding:7px 11px;border-radius:999px;background:var(--secondary-background-color);border:1px solid var(--divider-color);font:inherit;font-size:13px;font-weight:600;cursor:pointer}.row button[data-delta]{width:34px;height:34px;padding:0;border-radius:12px;font-size:16px}.row button:hover{color:var(--cf-accent);border-color:color-mix(in srgb,var(--cf-accent) 45%,transparent)}
+      .row select{flex:0 0 auto;min-width:78px;max-width:130px;overflow:hidden;text-overflow:ellipsis;font:inherit;font-size:13px;font-weight:600;color:var(--cf-accent);background:color-mix(in srgb,var(--cf-accent) 12%,transparent);border:1px solid color-mix(in srgb,var(--cf-accent) 30%,transparent);border-radius:12px;padding:8px 10px;cursor:pointer}
+      button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--cf-accent);outline-offset:2px}
+      .badge{color:var(--error-color);font-size:11px;white-space:nowrap}.empty{color:var(--secondary-text-color);font-size:13px;text-align:center}
+      @keyframes cf-bump{0%{transform:translateY(3px) scale(.95);opacity:.6}60%{transform:translateY(-1px) scale(1.01);opacity:1}100%{transform:none;opacity:1}}
+      .bump{animation:cf-bump var(--cf-motion,220ms) cubic-bezier(.2,.7,.3,1)}
+      [data-motion="off"] *{animation:none!important;transition:none!important}
+      [data-motion="on"] button:active{transform:scale(.95)}
+      @media(max-width:420px){ha-card{padding:12px 12px 14px;gap:8px}.hero{font-size:30px}.dial{width:min(100%,196px)}.row button[data-delta]{width:30px;height:30px}}
+     </style><ha-card tabindex="0" role="group" aria-label="Tap card background to toggle heating"><div class="head"><span class="icon"><ha-icon></ha-icon></span><span class="title"></span><span class="chips"></span><button class="schedule" aria-label="Open schedule details" title="Open schedule details"><ha-icon icon="mdi:calendar-clock"></ha-icon></button></div><div class="stage"><svg class="dial" viewBox="0 0 200 200"><circle class="track" cx="100" cy="100" r="80" transform="rotate(135 100 100)"></circle><circle class="value" cx="100" cy="100" r="80" transform="rotate(135 100 100)"></circle><g class="thumbs"></g></svg><div class="center"><span class="hero"><strong></strong><span class="unit"></span></span><span class="sub"></span></div></div><div class="row"></div></ha-card>`;
+    const root = this.shadowRoot;
+    this._bindCardToggle(root.querySelector('ha-card'));
+    root.querySelector('ha-card').setAttribute('aria-label', this._actionLabel(t));
+    const iconBox = root.querySelector('.icon');
+    iconBox.dataset.active = active ? 'true' : 'false';
+    root.querySelector('.icon ha-icon').setAttribute('icon', String(c.icon || a.icon || 'mdi:thermostat'));
+    root.querySelector('.icon ha-icon').setAttribute('aria-hidden', 'true');
+    this._paintIcon(iconBox, root.querySelector('.icon ha-icon'), picture);
+    root.querySelector('.title').textContent = String(title);
+    const chips = root.querySelector('.chips');
+    const addChip = (show, text, modifier = '') => { if (show && text) { const span = document.createElement('span'); span.className = modifier ? `chip ${modifier}` : 'chip'; span.textContent = String(text); chips.append(span); } };
+    addChip(c.show_state_chip && !unavailable, modeLabel(e?.state, t), 'state');
+    addChip(c.show_humidity_chip && !unavailable, numeric(a.current_humidity) !== null ? `${numeric(a.current_humidity)}%` : '');
+    if (c.show_unavailable_badge && unavailable) { const b = document.createElement('span'); b.className = 'badge'; b.textContent = t.unavailable; chips.append(b); }
+    const schedule = root.querySelector('.schedule');
+    schedule.setAttribute('aria-label', t.openSchedule);
+    schedule.title = t.openSchedule;
+    schedule.dataset.active = scheduleActive ? 'true' : 'false';
+    schedule.hidden = !c.show_schedule_button;
+    schedule.addEventListener('click', () => this._openSchedule());
+
+    const svg = root.querySelector('.dial');
+    const hero = svg;
+    const valueArc = svg.querySelector('.value');
+    const thumbs = svg.querySelector('.thumbs');
+    const paintThumbs = (points) => { thumbs.replaceChildren(); for (const point of points) { const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle'); circle.setAttribute('class', 'thumb'); circle.setAttribute('cx', String(point.x)); circle.setAttribute('cy', String(point.y)); circle.setAttribute('r', '9'); thumbs.append(circle); } };
+    const track = svg.querySelector('.track');
+    const fullTrack = dialArc(0, 1);
+    track.setAttribute('stroke-dasharray', `${fullTrack.track} ${fullTrack.track * 2}`);
+    valueArc.setAttribute('stroke-dasharray', geometry.arc.dasharray);
+    valueArc.setAttribute('stroke-dashoffset', String(geometry.arc.dashoffset));
+    paintThumbs(geometry.thumbs);
+    const stage = root.querySelector('.stage');
+    if (unavailable || !hasTarget) {
+      const message = document.createElement('p'); message.className = 'empty';
+      message.textContent = unavailable ? t.entityUnavailable : t.targetUnavailable;
+      stage.append(message);
+      svg.style.display = 'none'; // `hidden` is not styled for SVG in the HTML namespace
+      root.querySelector('.row').hidden = true;
+    }
+
+    const display = root.querySelector('.hero');
+    const heroNumber = display.querySelector('strong');
+    const heroUnit = display.querySelector('.unit');
+    // The secondary line is a sibling of the hero, inside the centre overlay.
+    const sub = root.querySelector('.center .sub');
+    const targetLabel = model.dual ? `${formatNumber(model.low, locale)}–${formatNumber(model.high, locale)} ${unit}` : `${formatNumber(model.value, locale)} ${unit}`;
+    const targetAccessible = model.dual ? t.targetRange(formatNumber(model.low, locale), formatNumber(model.high, locale), unit) : t.target(formatNumber(model.value, locale), unit);
+    const currentDisplay = currentTemperatureDisplay(currentValue, unit, locale);
+    if (plan.hero === 'target' && hasTarget) {
+      heroNumber.textContent = model.dual ? `${formatNumber(model.low, locale)}–${formatNumber(model.high, locale)}` : formatNumber(model.value, locale);
+      heroUnit.textContent = unit;
+      sub.textContent = plan.chip === 'current' && currentValue !== null ? currentDisplay : '';
+    } else if (plan.hero === 'current' && currentDisplay) {
+      heroNumber.textContent = currentDisplay.replace(` ${unit}`, '');
+      heroUnit.textContent = unit;
+      sub.textContent = hasTarget ? targetLabel : '';
+    } else {
+      heroNumber.textContent = '—';
+      heroUnit.textContent = '';
+      sub.textContent = '';
+    }
+    if (!hasTarget && !unavailable) sub.textContent = t.targetUnavailable;
+    this._markHeroMotion(display);
+
+    if (heroAdjustable) {
+      // The svg is the slider: role and values describe the target (the
+      // midpoint for heat_cool, which is what the arrow keys move).
+      hero.setAttribute('aria-label', model.dual ? t.midpoint : t.targetLabel);
+      hero.setAttribute('aria-valuetext', targetAccessible);
+      hero.setAttribute('aria-valuenow', String(model.value));
+      if (model.min !== null) hero.setAttribute('aria-valuemin', String(model.min));
+      if (model.max !== null) hero.setAttribute('aria-valuemax', String(model.max));
+    }
+    this._markHeroControl(hero, heroAdjustable);
+    this._bindHeroControls(hero, { entity: c.entity, adjustable: heroAdjustable, dial: true });
+
+    const row = root.querySelector('.row');
+    if (!unavailable && hasTarget) {
+      if (c.show_step_controls && adjustable) { const minus = document.createElement('button'); minus.dataset.delta = String(-step); minus.setAttribute('aria-label', t.decrease); minus.textContent = '−'; row.append(minus); }
+      if (c.show_mode_buttons && modeList.length) { const select = document.createElement('select'); select.className = 'hvac-mode'; select.setAttribute('aria-label', t.hvacMode); for (const m of modeList) { const option = document.createElement('option'); option.value = String(m); option.textContent = modeLabel(m, t); select.append(option); } select.value = modeList.includes(e.state) ? e.state : modeList[0]; row.append(select); select.addEventListener('change', (ev) => { if (modes(e).includes(ev.target.value)) this._service('climate', 'set_hvac_mode', { entity_id: c.entity, hvac_mode: ev.target.value }); }); }
+      if (c.show_step_controls && adjustable) { const plus = document.createElement('button'); plus.dataset.delta = String(step); plus.setAttribute('aria-label', t.increase); plus.textContent = '+'; row.append(plus); }
+      const program = this._scheduleProgram();
+      const override = program?.manual_override;
+      if (override) { const badge = document.createElement('span'); badge.className = 'badge'; badge.textContent = t.overrideActive(formatOverrideExpiry(override.expires_at, locale)); row.append(badge); const resume = document.createElement('button'); resume.textContent = t.resumeSchedule; resume.setAttribute('aria-label', t.resumeSchedule); resume.addEventListener('click', () => this._service('climate_flow_scheduler', 'resume_program', { climate_entity: c.entity })); row.append(resume); }
+      const pause = override ? null : activePause(program?.pause);
+      if (pause) { const badge = document.createElement('span'); badge.className = 'badge'; badge.textContent = t.pauseActive(formatOverrideExpiry(pause.until, locale)); row.append(badge); const resume = document.createElement('button'); resume.textContent = t.resumeSchedule; resume.setAttribute('aria-label', t.resumeSchedule); resume.addEventListener('click', () => this._service('climate_flow_scheduler', 'resume_program', { climate_entity: c.entity })); row.append(resume); }
+      if (!row.children.length) row.hidden = true;
+    } else if (unavailable) row.hidden = true;
+    row.querySelectorAll('[data-delta]').forEach((b) => b.addEventListener('click', () => { fireHaptic(c, 'medium'); this._setTemperature(model.value + Number(b.dataset.delta), e); }));
+  }
   _scheduleProgram() {
     return this._scheduleSensor()?.attributes?.programs?.[this.config.entity] || null;
   }
@@ -1772,7 +2021,11 @@ export class ClimateFlowCard extends HTMLElementBase {
     return true;
   }
   _bindHeroControls(element, options) {
-    const { entity, adjustable } = options;
+    // Shared gestures for the hero of every layout. The dial passes its own
+    // pointer starter (angle instead of vertical delta); the rest stays
+    // identical so all layouts agree on batching, rollback and the
+    // dragConsumed guard.
+    const { entity, adjustable, dial = false } = options;
     element.addEventListener('click', () => {
       // A finished drag is not a tap: its trailing click is swallowed here.
       if (this._dragConsumed) { this._dragConsumed = false; return; }
@@ -1784,7 +2037,10 @@ export class ClimateFlowCard extends HTMLElementBase {
       if (element.tagName?.toLowerCase() !== 'button') element.addEventListener('keydown', (event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); element.click(); } });
       return;
     }
-    element.addEventListener('pointerdown', (event) => this._startHeroDrag(event));
+    element.addEventListener('pointerdown', (event) => {
+      if (dial) this._startDialDrag(event, { entity });
+      else this._startHeroDrag(event);
+    });
     element.addEventListener('keydown', (event) => {
       const sign = event.key === 'ArrowUp' || event.key === 'ArrowRight' ? 1 : (event.key === 'ArrowDown' || event.key === 'ArrowLeft' ? -1 : 0);
       const step = this._heroStep();
@@ -1859,6 +2115,129 @@ export class ClimateFlowCard extends HTMLElementBase {
     this._dragListeners = null;
     this._drag = null;
   }
+  _detachDialDrag() {
+    const win = globalThis.window;
+    const listeners = this._dragListeners;
+    if (win && listeners) {
+      win.removeEventListener('pointermove', listeners.onMove);
+      win.removeEventListener('pointerup', listeners.onUp);
+      win.removeEventListener('pointercancel', listeners.onCancel);
+      win.removeEventListener('blur', listeners.onCancel);
+    }
+    this._dragListeners = null;
+    this._dialDrag = null;
+  }
+  _startDialDrag(event, { entity }) {
+    // Same interaction model as the hero drag (threshold, window listeners so
+    // the re-render cannot orphan them, batched commit on release), but the
+    // value comes from the angle under the pointer instead of a vertical
+    // delta. With heat_cool the pointer grabs the nearest bound and moves it
+    // alone, which is why the bounds are patched and committed individually.
+    if (event.pointerType === 'mouse' && event.button !== 0) return;
+    const svg = event.currentTarget;
+    // The drag carries the displayed entity object (limits, step and the
+    // optimistic preview all read attributes from it), not the entity id.
+    const displayed = this._displayEntity(this._hass?.states?.[entity]);
+    const model = targetModel(displayed);
+    if (!model.available || !model.controllable) return;
+    const step = this._heroStep();
+    if (step === null) return;
+    const rect = svg.getBoundingClientRect ? svg.getBoundingClientRect() : null;
+    const origin = rect ? dialValueFromPointer(event.clientX, event.clientY, rect, model.min, model.max) : null;
+    if (origin === null) return;
+    const drag = {
+      pointerId: event.pointerId,
+      entity: displayed,
+      rect,
+      startClientX: event.clientX, startClientY: event.clientY,
+      min: model.min, max: model.max, step,
+      dual: model.dual,
+      bound: model.dual ? (Math.abs(origin - model.low) <= Math.abs(model.high - origin) ? 'low' : 'high') : null,
+      active: false,
+      value: model.value, low: model.low, high: model.high,
+    };
+    this._dragConsumed = false;
+    this._dialDrag = drag;
+    const onDialMove = (moveEvent) => {
+      if (moveEvent.pointerId !== undefined && drag.pointerId !== undefined && moveEvent.pointerId !== drag.pointerId) return;
+      if (!drag.active) {
+        if (Math.hypot(moveEvent.clientX - drag.startClientX, moveEvent.clientY - drag.startClientY) < DIAL_DRAG_THRESHOLD_PX) return;
+        this._dialDrag.active = true;
+        this._dragConsumed = true;
+        svg.setAttribute('data-active', 'true');
+      }
+      const next = dialValueFromPointer(moveEvent.clientX, moveEvent.clientY, drag.rect, drag.min, drag.max);
+      if (next === null) return;
+      if (drag.bound) {
+        const value = dialBoundValue(next, drag.bound, drag.entity, drag.step);
+        if (value === null) return;
+        const previous = drag.bound === 'low' ? drag.low : drag.high;
+        if (value === previous) return;
+        if (drag.bound === 'low') drag.low = value; else drag.high = value;
+        drag.value = (drag.low + drag.high) / 2;
+        this._patchDial({ target_temp_low: drag.low, target_temp_high: drag.high });
+      } else {
+        const value = clampTarget(next, drag.entity, drag.step, this._stepOverride);
+        if (value === null || value === drag.value) return;
+        drag.value = value;
+        this._patchDial({ temperature: value });
+      }
+      fireHaptic(this.config, 'light');
+    };
+    const onDialUp = (upEvent) => {
+      if (drag.pointerId === undefined || upEvent.pointerId === undefined || drag.pointerId === upEvent.pointerId) {
+        if (drag.active && drag.bound) {
+          this._setTemperature(null, drag.entity, { payload: { target_temp_low: drag.low, target_temp_high: drag.high }, debounce: true });
+        } else if (drag.active) {
+          this._setTemperature(drag.value, drag.entity, { debounce: true });
+        }
+      }
+      svg.removeAttribute('data-active');
+      this._detachDialDrag();
+    };
+    const onCancelDial = () => {
+      if (this._dialDrag) this._dragConsumed = true;
+      svg.removeAttribute('data-active');
+      this._detachDialDrag();
+      this._renderPreservingDeltaFocus(); // restore the real value, send nothing
+    };
+    const win = globalThis.window;
+    win.addEventListener('pointermove', onDialMove);
+    win.addEventListener('pointerup', onDialUp);
+    win.addEventListener('pointercancel', onCancelDial);
+    win.addEventListener('blur', onCancelDial);
+    this._dragListeners = { onMove: onDialMove, onUp: onDialUp, onCancel: onCancelDial };
+  }
+  _patchDial(nextAttributes) {
+    // Live update of the dial while dragging: value arc, thumbs and hero, but
+    // never a full re-render (that would replace the svg under the finger).
+    const root = this.shadowRoot;
+    const svg = root?.querySelector?.('.dial');
+    if (!svg) return false;
+    const base = this._displayEntity(this._hass?.states?.[this.config.entity]);
+    const model = targetModel({ ...base, attributes: { ...(base?.attributes || {}), ...nextAttributes } });
+    if (!model.available) return false;
+    const t = this._strings();
+    const unit = this._hass?.config?.unit_system?.temperature || '°C';
+    const locale = this._hass?.locale?.language;
+    const geometry = this._dialGeometry(model);
+    const valueArc = svg.querySelector('.value');
+    valueArc.setAttribute('stroke-dasharray', geometry.arc.dasharray);
+    valueArc.setAttribute('stroke-dashoffset', String(geometry.arc.dashoffset));
+    const thumbs = svg.querySelector('.thumbs');
+    const circles = thumbs.querySelectorAll('.thumb');
+    if (circles.length === geometry.thumbs.length && circles.length) {
+      circles.forEach((circle, index) => { circle.setAttribute('cx', String(geometry.thumbs[index].x)); circle.setAttribute('cy', String(geometry.thumbs[index].y)); });
+    } else {
+      thumbs.replaceChildren();
+      for (const point of geometry.thumbs) { const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle'); circle.setAttribute('class', 'thumb'); circle.setAttribute('cx', String(point.x)); circle.setAttribute('cy', String(point.y)); circle.setAttribute('r', '9'); thumbs.append(circle); }
+    }
+    const hero = root.querySelector('.hero strong');
+    if (hero) hero.textContent = model.dual ? `${formatNumber(model.low, locale)}–${formatNumber(model.high, locale)}` : formatNumber(model.value, locale);
+    svg.setAttribute('aria-valuenow', String(model.value));
+    svg.setAttribute('aria-valuetext', model.dual ? t.targetRange(formatNumber(model.low, locale), formatNumber(model.high, locale), unit) : t.target(formatNumber(model.value, locale), unit));
+    return true;
+  }
   _focusedDelta() {
     // Which +/- control owns focus right now. The optimistic re-render replaces
     // the whole shadow tree, which silently drops focus otherwise.
@@ -1874,6 +2253,7 @@ export class ClimateFlowCard extends HTMLElementBase {
       const active = this.shadowRoot?.activeElement;
       if (active?.matches?.('.setpoint[role="slider"]')) return '.setpoint[role="slider"]';
       if (active?.matches?.('.target[role="slider"]')) return '.target[role="slider"]';
+      if (active?.matches?.('.dial[role="slider"]')) return '.dial[role="slider"]';
       return null;
     } catch { return null; }
   }
@@ -1949,8 +2329,11 @@ export class ClimateFlowCard extends HTMLElementBase {
     dialog.querySelector('.choices button')?.focus();
   }
   _setTemperature(value, entity, options = {}) {
+    // `value` is the scalar the +/- buttons and the arrow keys move. A gesture
+    // that edits one bound of a heat_cool range instead passes the explicit
+    // `payload`, which is what goes on the wire and into the optimistic state.
     const base=this._displayEntity(this._hass?.states?.[this.config.entity] || entity);
-    const payload = temperaturePayload(base, value, this.config.step, this._stepOverride);
+    const payload = options.payload || temperaturePayload(base, value, this.config.step, this._stepOverride);
     const program = this._scheduleProgram();
     if (program?.enabled && this._hass?.services?.climate_flow_scheduler?.set_manual_override) {
       if (payload?.temperature === undefined) { this._showServiceError(this._strings().dualOverrideUnsupported); return; }
