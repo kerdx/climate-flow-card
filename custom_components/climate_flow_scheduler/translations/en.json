@@ -21,7 +21,7 @@
       "message": "Temperatures must be finite numbers."
     },
     "invalid_hvac_mode": {
-      "message": "hvac_mode must be one of off, heat, cool, auto, dry, or fan_only."
+      "message": "hvac_mode must be one of off, heat, cool, auto, dry, fan_only, or heat_cool."
     },
     "unsupported_hvac_mode": {
       "message": "HVAC mode {mode} is not available for this climate entity."
@@ -82,6 +82,15 @@
     },
     "heat_cool_unsupported": {
       "message": "Schedules do not support the heat_cool mode."
+    },
+    "heat_cool_dual_required": {
+      "message": "A heat_cool program needs both temperatures in every slot."
+    },
+    "dual_range_invalid": {
+      "message": "The low target {low} must stay below the high target {high}."
+    },
+    "dual_slot_unsupported": {
+      "message": "A slot with two target temperatures needs heat_cool: set the program mode to heat_cool or use one temperature."
     },
     "invalid_override_duration": {
       "message": "Choose a valid manual override duration."

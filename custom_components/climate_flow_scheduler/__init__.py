@@ -28,6 +28,9 @@ from .schedule import (
     program_status,
     validate_single_target_mode,
     validate_target,
+    validate_dual_target,
+    slot_is_dual,
+    dual_needs_update,
     validate_override_step,
     normalize_manual_override,
     validate_manual_override_target,
@@ -326,7 +329,14 @@ class Scheduler:
                         _validate_hvac_mode(state, mode)
                     if target is not None and mode != "off":
                         step_override = validate_override_step(override.get("step")) if target_kind == "__manual_override__" and override else None
-                        _validate_climate_target(state, [target], mode, step_override)
+                        if isinstance(target, tuple):
+                            # Overrides and pauses are always single floats, so a
+                            # pair can only come from a dual slot; it has no
+                            # step override to apply.
+                            step_override = None
+                            _validate_dual_target(state, target[0], target[1], _effective_mode(state, mode))
+                        else:
+                            _validate_climate_target(state, [target], mode, step_override)
                 except HomeAssistantError as err:
                     # A permanent validation failure is retried on config/state change,
                     # but not on every minute tick.
@@ -340,12 +350,21 @@ class Scheduler:
                             "entity_id": entity_id, "hvac_mode": mode,
                         }, blocking=True)
                     if target is not None and mode != "off":
-                        current = state.attributes.get("temperature")
-                        comparison_step = step_override if step_override is not None else _step(state)
-                        if target_needs_update(current, target, comparison_step):
-                            await self.hass.services.async_call("climate", "set_temperature", {
-                                "entity_id": entity_id, "temperature": target,
-                            }, blocking=True)
+                        if isinstance(target, tuple):
+                            low, high = target
+                            # A dual pair never carries a step override: those
+                            # belong to single-target overrides only.
+                            if dual_needs_update(state.attributes.get("target_temp_low"), state.attributes.get("target_temp_high"), low, high, _step(state)):
+                                await self.hass.services.async_call("climate", "set_temperature", {
+                                    "entity_id": entity_id, "target_temp_low": low, "target_temp_high": high,
+                                }, blocking=True)
+                        else:
+                            current = state.attributes.get("temperature")
+                            comparison_step = step_override if step_override is not None else _step(state)
+                            if target_needs_update(current, target, comparison_step):
+                                await self.hass.services.async_call("climate", "set_temperature", {
+                                    "entity_id": entity_id, "temperature": target,
+                                }, blocking=True)
                     self.applied_slot[entity_id] = apply_key
                     self.pending.discard(entity_id)
                     self.errors[entity_id] = None
@@ -488,15 +507,6 @@ def _strict_bool(value: Any) -> bool:
     return value
 
 
-def _program_temperatures(program: dict[str, Any]) -> list[Any]:
-    """Slot targets plus the optional away target, validated together."""
-    temperatures: list[Any] = [slot["temperature"] for slot in program["slots"]]
-    away = program.get("away_temperature")
-    if away is not None:
-        temperatures.append(away)
-    return temperatures
-
-
 def _validate_hvac_mode(state: Any, mode: str) -> None:
     """Reject a program mode the entity does not expose, with a machine code."""
     modes = state.attributes.get("hvac_modes")
@@ -507,14 +517,42 @@ def _validate_hvac_mode(state: Any, mode: str) -> None:
         )
 
 
+def _effective_mode(state: Any, mode: Any) -> Any:
+    """The mode the program will actually run: its own, or the entity's current one."""
+    return mode if mode is not None else state.state
+
+
 def _validate_program(state: Any, program: dict[str, Any]) -> None:
-    """Validate the program's mode and targets against the entity."""
+    """Validate the program's mode and targets against the entity.
+
+    Each slot is checked in its own shape: a single temperature must fit the
+    effective mode, a dual slot requires heat_cool (checked here with the mode
+    in hand, so a mismatch is reported at save time rather than at a boundary).
+    """
     mode = program.get("hvac_mode")
     if mode is not None:
         _validate_hvac_mode(state, mode)
     if mode == "off":
         return
-    _validate_climate_target(state, _program_temperatures(program), mode)
+    for slot in program["slots"]:
+        if slot_is_dual(slot):
+            _validate_dual_target(state, slot["target_temp_low"], slot["target_temp_high"], _effective_mode(state, mode))
+        else:
+            _validate_climate_target(state, [slot["temperature"]], mode)
+    away = program.get("away_temperature")
+    if away is not None:
+        _validate_climate_target(state, [away], mode)
+
+
+def _validate_dual_target(state: Any, low: Any, high: Any, effective_mode: Any) -> None:
+    """Grid-check a heat_cool pair; any single-temperature mode is rejected."""
+    if effective_mode != "heat_cool":
+        raise ScheduleError(
+            "A slot with two target temperatures needs heat_cool: set the program mode to heat_cool or use one temperature",
+            "dual_slot_unsupported", mode=effective_mode,
+        )
+    native_step = _step(state)
+    validate_dual_target(low, high, state.attributes["min_temp"], state.attributes["max_temp"], native_step)
 
 
 def _validate_climate_target(state: Any, temperatures: list[Any], mode: Any = None, step_override: float | None = None) -> None:

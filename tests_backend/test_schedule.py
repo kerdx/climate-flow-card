@@ -16,6 +16,10 @@ ScheduleError, active_slot, validate_program, validate_target = (
     schedule.ScheduleError, schedule.active_slot, schedule.validate_program, schedule.validate_target
 )
 validate_single_target_mode = schedule.validate_single_target_mode
+slot_is_dual = schedule.slot_is_dual
+slot_target = schedule.slot_target
+validate_dual_target = schedule.validate_dual_target
+dual_needs_update = schedule.dual_needs_update
 next_boundary = schedule.next_boundary
 target_needs_update = schedule.target_needs_update
 program_status = schedule.program_status
@@ -51,6 +55,10 @@ def slot(slot_id="a", days=None, start="09:00", end="10:00", temperature=21):
     return {"id": slot_id, "days": days or [1], "start": start, "end": end, "temperature": temperature}
 
 
+def dual_slot(slot_id="a", days=None, start="09:00", end="10:00", low=18, high=22):
+    return {"id": slot_id, "days": days or [1], "start": start, "end": end, "target_temp_low": low, "target_temp_high": high}
+
+
 class ScheduleTests(unittest.TestCase):
     def test_schema_and_ids_and_target(self):
         valid = validate_program([slot()], True)
@@ -77,9 +85,16 @@ class ScheduleTests(unittest.TestCase):
         self.assertIsNone(validate_program([slot()])["hvac_mode"])
         for mode in ("off", "heat", "auto", "dry", "fan_only"):
             self.assertEqual(validate_program([], False, None, mode)["hvac_mode"], mode)
-        for bad in (True, "", "banana", "heat_cool", 3):
+        # heat_cool is schedulable now that slots can carry both temperatures,
+        # but only with dual slots: a single target has nothing to send.
+        self.assertEqual(validate_program([], False, None, "heat_cool")["hvac_mode"], "heat_cool")
+        self.assertEqual(validate_program([dual_slot()], True, None, "heat_cool")["hvac_mode"], "heat_cool")
+        for bad in (True, "", "banana", 3):
             with self.subTest(bad=bad), self.assertRaises(ScheduleError):
                 validate_program([slot()], False, None, bad)
+        with self.assertRaises(ScheduleError) as single:
+            validate_program([slot()], True, None, "heat_cool")
+        self.assertEqual(single.exception.code, "heat_cool_dual_required")
 
     def test_same_day_overlap_and_half_open(self):
         with self.assertRaises(ScheduleError):
@@ -141,6 +156,74 @@ class ScheduleTests(unittest.TestCase):
         self.assertEqual(resolve_target(slots, None, datetime(2026, 10, 12, 10, 30)), (None, None))
         self.assertEqual(resolve_target([], None, datetime(2026, 10, 12, 10, 30)), (None, None))
         self.assertEqual(resolve_target([], 17, datetime(2026, 10, 12, 10, 30)), (AWAY_TARGET, 17.0))
+        # A dual slot resolves to the pair; a single slot and the away target
+        # stay floats, so the apply step can tell the two payloads apart.
+        dual = validate_program([dual_slot("day", [1], "09:00", "10:00", 17, 21)], True)["slots"]
+        self.assertEqual(resolve_target(dual, None, datetime(2026, 10, 12, 9, 30)), ("day", (17.0, 21.0)))
+
+    def test_dual_slot_schema_is_exact_and_mixed_programs_are_allowed(self):
+        program = validate_program([dual_slot("day", [1], "09:00", "10:00"), slot("night", [1], "21:00", "22:00", 19)], True)
+        self.assertEqual(program["slots"][0]["target_temp_low"], 18.0)
+        self.assertEqual(program["slots"][0]["target_temp_high"], 22.0)
+        self.assertEqual(program["slots"][1]["temperature"], 19.0)
+        self.assertNotIn("temperature", program["slots"][0])
+        self.assertEqual(slot_is_dual(program["slots"][0]), True)
+        self.assertEqual(slot_is_dual(program["slots"][1]), False)
+        self.assertEqual(slot_target(program["slots"][0]), (18.0, 22.0))
+        self.assertEqual(slot_target(program["slots"][1]), 19.0)
+        # The key set is exact in both shapes: a partial pair, an extra key or
+        # both shapes at once are all schema errors.
+        partial = dual_slot()
+        partial.pop("target_temp_high")
+        both = {**dual_slot(), "temperature": 20}
+        extra = {**dual_slot(), "fan_mode": "auto"}
+        for bad in (partial, both, extra, {**slot(), "target_temp_low": 18}):
+            with self.subTest(bad=bad), self.assertRaises(ScheduleError) as catch:
+                validate_program([bad])
+            self.assertEqual(catch.exception.code, "invalid_slot_schema")
+        # Overnight dual slots keep the same overlap rule as single ones.
+        with self.assertRaises(ScheduleError):
+            validate_program([dual_slot("night", [7], "23:00", "02:00"), dual_slot("early", [1], "01:00", "03:00")])
+
+    def test_dual_range_validation(self):
+        with self.assertRaises(ScheduleError) as equal:
+            validate_program([dual_slot(low=20, high=20)])
+        self.assertEqual(equal.exception.code, "dual_range_invalid")
+        with self.assertRaises(ScheduleError) as inverted:
+            validate_program([dual_slot(low=22, high=18)])
+        self.assertEqual(inverted.exception.code, "dual_range_invalid")
+        for bad in (True, "20", float("nan"), float("inf")):
+            with self.subTest(bad=bad), self.assertRaises(ScheduleError) as catch:
+                validate_program([dual_slot(low=bad, high=22)])
+            self.assertEqual(catch.exception.code, "invalid_temperature")
+        # On the entity grid: both bounds must sit on the step, inside limits.
+        self.assertEqual(validate_dual_target(17.5, 22, 7, 30, 0.5), (17.5, 22.0))
+        with self.assertRaises(ScheduleError) as off_step:
+            validate_dual_target(17.3, 22, 7, 30, 0.5)
+        self.assertEqual(off_step.exception.code, "target_off_step")
+        with self.assertRaises(ScheduleError) as outside:
+            validate_dual_target(5, 31, 7, 30, 0.5)
+        self.assertEqual(outside.exception.code, "target_outside_limits")
+        with self.assertRaises(ScheduleError) as touching:
+            validate_dual_target(20, 20, 7, 30, 0.5)
+        self.assertEqual(touching.exception.code, "dual_range_invalid")
+        # The apply step compares each bound with the native tolerance.
+        self.assertFalse(dual_needs_update(18, 22, 18.0, 22.0, 0.5))
+        self.assertTrue(dual_needs_update(18, 22, 18.5, 22.0, 0.5))
+        self.assertTrue(dual_needs_update(18, 21.5, 18.0, 22.0, 0.5))
+        self.assertTrue(dual_needs_update(None, None, 18.0, 22.0, 0.5))
+
+    def test_apply_key_covers_both_bounds_of_a_user_target(self):
+        # Override and pause targets are hashed into the cache identity; a
+        # pair must distinguish both bounds, not just the first one.
+        self.assertNotEqual(
+            program_apply_key(None, "__manual_override__", (20.0, 22.0)),
+            program_apply_key(None, "__manual_override__", (20.0, 21.0)),
+        )
+        self.assertNotEqual(
+            program_apply_key(None, "__manual_override__", (20.0, 22.0)),
+            program_apply_key(None, "__manual_override__", 20.0),
+        )
 
     def test_availability_transitions_require_retry_only_during_active_slot(self):
         self.assertEqual(availability_action(True, True, "heat", "unavailable"), "pending")

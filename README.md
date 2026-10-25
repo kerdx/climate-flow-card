@@ -60,7 +60,7 @@ No legacy card-tag or layout aliases are supported.
 
 ## Scheduler
 
-The backend scheduler is optional and stores one program per climate entity. Programs contain non-overlapping slots with weekdays, Home Assistant local start/end times, and target temperatures. An optional `hvac_mode` can be applied both during and outside slots. An optional outside-schedule temperature sets a target outside slots; if it is absent, no target is sent outside slots, even though the configured HVAC mode still applies there.
+The backend scheduler is optional and stores one program per climate entity. Programs contain non-overlapping slots with weekdays, Home Assistant local start/end times, and a target per slot: either one `temperature`, or the heat_cool pair `target_temp_low` with `target_temp_high` (mixed slots are allowed). An optional `hvac_mode` can be applied both during and outside slots; `heat_cool` becomes selectable when the entity exposes it and then every slot must carry both temperatures, while a range slot requires the effective mode to be `heat_cool`. An optional outside-schedule temperature sets a target outside slots; if it is absent, no target is sent outside slots, even though the configured HVAC mode still applies there. Temporary overrides and vacation pauses stay single-target: on a heat_cool program they are refused instead of sending a target the entity cannot accept.
 
 Manual target changes can create a temporary override (30 minutes, 1 hour, 2 hours, or until the next schedule boundary); **Resume schedule** clears it immediately.
 

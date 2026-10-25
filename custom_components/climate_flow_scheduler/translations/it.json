@@ -21,7 +21,7 @@
       "message": "Le temperature devono essere numeri finiti."
     },
     "invalid_hvac_mode": {
-      "message": "hvac_mode deve essere uno di off, heat, cool, auto, dry o fan_only."
+      "message": "hvac_mode deve essere uno di off, heat, cool, auto, dry, fan_only o heat_cool."
     },
     "unsupported_hvac_mode": {
       "message": "La modalità HVAC {mode} non è disponibile per questa entità climate."
@@ -82,6 +82,15 @@
     },
     "heat_cool_unsupported": {
       "message": "Le pianificazioni non supportano la modalità heat_cool."
+    },
+    "heat_cool_dual_required": {
+      "message": "Un programma heat_cool richiede entrambe le temperature in ogni fascia."
+    },
+    "dual_range_invalid": {
+      "message": "Il limite basso {low} deve restare sotto il limite alto {high}."
+    },
+    "dual_slot_unsupported": {
+      "message": "Una fascia con due temperature richiede heat_cool: imposta la modalità del programma su heat_cool oppure usa una sola temperatura."
     },
     "invalid_override_duration": {
       "message": "Scegli una durata di override manuale valida."

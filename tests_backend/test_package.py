@@ -140,7 +140,8 @@ class PackageTests(unittest.TestCase):
             "invalid_slot_id", "duplicate_slot_id", "invalid_days", "duplicate_days",
             "same_start_end", "slots_overlap", "climate_range_unavailable",
             "climate_range_invalid", "target_outside_limits", "target_off_step",
-            "heat_cool_unsupported",
+            "heat_cool_unsupported", "heat_cool_dual_required",
+            "dual_range_invalid", "dual_slot_unsupported",
             "invalid_override_duration", "no_next_change", "override_hvac_off", "invalid_override_step",
             "invalid_pause_duration", "pause_hvac_off",
         }

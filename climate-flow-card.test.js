@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { ClimateFlowCard, ClimateFlowCardEditor, CLIMATE_FLOW_CARD_TAG, CLIMATE_FLOW_CARD_EDITOR_TAG, registerClimateFlowElements, isClimateFlowElementsRegistered, isHomeAssistantFrontendReady, scheduleClimateFlowReregistration, clampTarget, temperaturePayload, targetModel, hvacToggleMode, scheduleDraft, validateScheduleDraft, defaultCardConfig, configSchema, configSchemaFields, getEntitySuggestion, sameCardConfig, errorLabel, effectiveStep, normalizeLayout, isClimateActive, isScheduleEnabled, awayTemperaturePayload, schedulableModes, manualOverrideServicePayload, overrideDurationChoices, formatOverrideExpiry, overrideFocusSelector,
+import { ClimateFlowCard, ClimateFlowCardEditor, CLIMATE_FLOW_CARD_TAG, CLIMATE_FLOW_CARD_EDITOR_TAG, registerClimateFlowElements, isClimateFlowElementsRegistered, isHomeAssistantFrontendReady, scheduleClimateFlowReregistration, clampTarget, temperaturePayload, targetModel, hvacToggleMode, scheduleDraft, validateScheduleDraft, seedRange, draftSlotPayload, defaultCardConfig, configSchema, configSchemaFields, getEntitySuggestion, sameCardConfig, errorLabel, effectiveStep, normalizeLayout, isClimateActive, isScheduleEnabled, awayTemperaturePayload, schedulableModes, manualOverrideServicePayload, overrideDurationChoices, formatOverrideExpiry, overrideFocusSelector,
   pauseServicePayload, pauseDurationChoices, activePause, PAUSE_DURATIONS, climateStatusKey, statusLabel, modeLabel, resolveLanguage, cardStrings, fieldLabel, pickEntityTimestamp, formatRelativeTime, formatNumber, pillStatusParts, currentTemperatureDisplay, CARD_SURFACES, normalizeAccentColor, normalizeSurface, sliderFillPercent, paintSliderFill, CARD_ACTIONS, normalizeCardAction, MODE_ACCENTS, modeAccentColor, cardLanguage, mainTemperatureKind, CARD_OPTION_DEFAULTS, cardDefault, stripCardDefaults, heroTemperaturePlan,
   HAPTIC_STYLES, HAPTIC_PATTERNS, hapticPattern, normalizeHapticStyle, vibrateSupported, fireHaptic,
   ANIMATION_DURATION_DEFAULT, normalizeAnimationDuration, COMMIT_DEBOUNCE_MS, COMMIT_RETRY_MS, COMMIT_RETRIES,
@@ -843,7 +843,7 @@ test('known target remains readable without numeric limits but is not controllab
 
 test('schedule draft conversion and validation', () => {
   assert.deepEqual(scheduleDraft({ enabled: true, away_temperature: 17, hvac_mode: 'cool', slots: [{ id: 'a', days: [1, 8, 2], start: '07:30', end: '08:00', temperature: 20 }] }), {
-    enabled: true, awayTemperature: 17, hvacMode: 'cool', slots: [{ id: 'a', days: [1, 2], start: '07:30', end: '08:00', temperature: 20 }],
+    enabled: true, awayTemperature: 17, hvacMode: 'cool', slots: [{ id: 'a', days: [1, 2], start: '07:30', end: '08:00', temperature: 20, range: false, targetTempLow: null, targetTempHigh: null }],
   });
   const draft = scheduleDraft({ slots: [{ id: 'a', days: [1], start: '07:30', end: '08:00', temperature: 20 }] });
   assert.equal(draft.awayTemperature, null);
@@ -856,13 +856,14 @@ test('schedule draft conversion and validation', () => {
   assert.ok(validateScheduleDraft({ slots: [{ ...draft.slots[0], temperature: '' }] }));
 });
 
-test('pill and compact are the only supported layouts', () => {
+test('layout normalization accepts the three supported layouts and nothing else', () => {
   assert.equal(normalizeLayout(undefined), 'pill');
   assert.equal(normalizeLayout(null), 'pill');
   assert.equal(normalizeLayout(''), 'pill');
   assert.equal(normalizeLayout('pill'), 'pill');
   assert.equal(normalizeLayout('row'), null);
   assert.equal(normalizeLayout('compact'), 'compact');
+  assert.equal(normalizeLayout('circular'), 'circular');
   assert.equal(normalizeLayout('tall'), null);
   assert.equal(defaultCardConfig('climate.living_room').layout, 'pill');
   assert.equal(ClimateFlowCard.getStubConfig({ states: {} }).layout, 'pill');
@@ -871,17 +872,110 @@ test('pill and compact are the only supported layouts', () => {
 
 test('program HVAC mode is validated and filtered to schedulable modes', () => {
   const draft = scheduleDraft({ enabled: false, slots: [] });
-  for (const hvacMode of [null, '', 'off', 'heat', 'cool', 'auto', 'dry', 'fan_only']) {
+  for (const hvacMode of [null, '', 'off', 'heat', 'cool', 'auto', 'dry', 'fan_only', 'heat_cool']) {
     assert.equal(validateScheduleDraft({ ...draft, hvacMode }), null, `mode ${String(hvacMode)}`);
   }
-  for (const hvacMode of ['heat_cool', 'banana', true]) {
+  for (const hvacMode of ['banana', true]) {
     assert.match(validateScheduleDraft({ ...draft, hvacMode }), /Unsupported HVAC mode/);
   }
   assert.match(validateScheduleDraft({ ...draft, hvacMode: 'banana' }, cardStrings('it')), /non supportata/);
-  assert.deepEqual(schedulableModes({ attributes: { hvac_modes: ['heat_cool', 'cool', 'heat', 'off'] } }), ['off', 'heat', 'cool']);
+  // heat_cool joins the list only when the entity exposes it.
+  assert.deepEqual(schedulableModes({ attributes: { hvac_modes: ['heat_cool', 'cool', 'heat', 'off'] } }), ['off', 'heat', 'cool', 'heat_cool']);
   assert.deepEqual(schedulableModes({ attributes: { hvac_modes: ['fan_only'] } }), ['fan_only']);
-  assert.deepEqual(schedulableModes({ attributes: {} }), ['off', 'heat', 'cool', 'auto', 'dry', 'fan_only']);
-  assert.deepEqual(schedulableModes(undefined), ['off', 'heat', 'cool', 'auto', 'dry', 'fan_only']);
+  assert.deepEqual(schedulableModes({ attributes: {} }), ['off', 'heat', 'cool', 'auto', 'dry', 'fan_only', 'heat_cool']);
+  assert.deepEqual(schedulableModes(undefined), ['off', 'heat', 'cool', 'auto', 'dry', 'fan_only', 'heat_cool']);
+});
+
+test('dual-slot drafts carry the pair through validation and the payload', () => {
+  // A heat_cool slot loads as a range and keeps no single temperature around.
+  const dual = scheduleDraft({ enabled: true, hvac_mode: 'heat_cool', slots: [{ id: 'day', days: [1, 2], start: '08:00', end: '18:00', target_temp_low: 18, target_temp_high: 22.5 }] });
+  assert.deepEqual(dual.slots[0], {
+    id: 'day', days: [1, 2], start: '08:00', end: '18:00',
+    temperature: null, range: true, targetTempLow: 18, targetTempHigh: 22.5,
+  });
+  // Exactly one target form goes on the wire, chosen in one place.
+  assert.deepEqual(draftSlotPayload(dual.slots[0]), {
+    id: 'day', days: [1, 2], start: '08:00', end: '18:00', target_temp_low: 18, target_temp_high: 22.5,
+  });
+  assert.equal(Object.hasOwn(draftSlotPayload(dual.slots[0]), 'temperature'), false, 'a range slot never carries temperature');
+  const single = draftSlotPayload(scheduleDraft({ slots: [{ id: 'a', days: [3, 1], start: '09:00', end: '10:00', temperature: 21 }] }).slots[0]);
+  assert.deepEqual(single, { id: 'a', days: [1, 3], start: '09:00', end: '10:00', temperature: 21 });
+  assert.equal(Object.hasOwn(single, 'target_temp_low'), false, 'a single slot never carries a pair');
+  // String inputs from the number fields are converted, like the old field.
+  assert.deepEqual(draftSlotPayload({ ...dual.slots[0], targetTempLow: '18.5', targetTempHigh: '23' }).target_temp_low, 18.5);
+  assert.equal(draftSlotPayload({ ...dual.slots[0], targetTempLow: '18.5', targetTempHigh: '23' }).target_temp_high, 23);
+});
+
+test('dual-slot draft validation mirrors the backend shape rules', () => {
+  const base = { enabled: true, awayTemperature: null, hvacMode: null };
+  const range = { id: 'a', days: [1], start: '09:00', end: '10:00', temperature: null, range: true, targetTempLow: 18, targetTempHigh: 22 };
+  const single = { ...range, range: false, temperature: 21, targetTempLow: null, targetTempHigh: null };
+  assert.equal(validateScheduleDraft({ ...base, slots: [range] }), null, 'a dual slot is valid on its own');
+  assert.equal(validateScheduleDraft({ ...base, slots: [single] }), null, 'a single slot is valid on its own');
+  assert.equal(validateScheduleDraft({ ...base, slots: [single, range] }), null, 'mixed programs are allowed per slot');
+  // Both bounds are required and the low one stays strictly below the high one.
+  for (const broken of [
+    { ...range, targetTempLow: 22, targetTempHigh: 22 },
+    { ...range, targetTempLow: 24, targetTempHigh: 22 },
+    { ...range, targetTempLow: '', targetTempHigh: 22 },
+    { ...range, targetTempLow: 18, targetTempHigh: null },
+    { ...range, targetTempLow: 'warm', targetTempHigh: 22 },
+  ]) {
+    assert.match(validateScheduleDraft({ ...base, slots: [broken] }), /low temperature must stay below/i);
+  }
+  // heat_cool has no single temperature: every slot must carry a pair.
+  assert.match(validateScheduleDraft({ ...base, hvacMode: 'heat_cool', slots: [single] }), /needs a temperature range in every slot/);
+  assert.equal(validateScheduleDraft({ ...base, hvacMode: 'heat_cool', slots: [range] }), null);
+  assert.match(validateScheduleDraft({ ...base, hvacMode: 'heat_cool', slots: [single, range] }), /needs a temperature range in every slot/, 'a mixed program under heat_cool is rejected');
+  // With the entity known, an enabled program must pair the mode and the shape:
+  // the same condition the backend validates on save.
+  const heatCoolEntity = { state: 'heat', attributes: { hvac_modes: ['off', 'heat', 'heat_cool'] } };
+  assert.equal(validateScheduleDraft({ ...base, slots: [single] }, undefined, heatCoolEntity), null, 'a single slot needs nothing special in heat');
+  assert.equal(validateScheduleDraft({ ...base, hvacMode: 'off', slots: [range] }, undefined, heatCoolEntity), null, 'off never sends a target');
+  assert.match(validateScheduleDraft({ ...base, hvacMode: 'heat', slots: [range] }, undefined, heatCoolEntity), /needs heat_cool: change the program mode/);
+  assert.equal(validateScheduleDraft({ ...base, hvacMode: 'heat_cool', slots: [single] }, undefined, heatCoolEntity), 'heat_cool needs a temperature range in every slot.');
+  assert.equal(validateScheduleDraft({ ...base, hvacMode: 'heat_cool', slots: [range] }, undefined, heatCoolEntity), null, 'heat_cool with pairs saves');
+  // An entity already in heat_cool pairs the same way through its own state.
+  const liveDual = { state: 'heat_cool', attributes: { hvac_modes: ['off', 'heat_cool'] } };
+  assert.match(validateScheduleDraft({ ...base, slots: [single] }, undefined, liveDual), /needs a temperature range in every slot/);
+  assert.equal(validateScheduleDraft({ ...base, slots: [range] }, undefined, liveDual), null);
+  // A disabled program is only checked on enable, like the backend.
+  assert.equal(validateScheduleDraft({ ...base, enabled: false, hvacMode: 'heat', slots: [range] }, undefined, heatCoolEntity), null);
+  // An unavailable entity cannot be paired against anything at save time.
+  assert.equal(validateScheduleDraft({ ...base, hvacMode: 'heat', slots: [range] }, undefined, { state: 'unavailable', attributes: {} }), null);
+  // The Italian strings answer the same rules.
+  assert.match(validateScheduleDraft({ ...base, slots: [{ ...range, targetTempLow: 24 }] }, cardStrings('it')), /sotto quella alta/);
+  assert.match(validateScheduleDraft({ ...base, hvacMode: 'heat_cool', slots: [single] }, cardStrings('it')), /intervallo di temperatura/);
+});
+
+test('seeding a range from a single value stays on the grid and inside limits', () => {
+  assert.deepEqual(seedRange(21, 0.5, 5, 30), { low: 21, high: 21.5 }, 'one step above the value it came from');
+  assert.deepEqual(seedRange(30, 0.5, 5, 30), { low: 29.5, high: 30 }, 'room for the high bound at the maximum');
+  assert.deepEqual(seedRange(5, 0.5, 5, 30), { low: 5, high: 5.5 }, 'the minimum is a valid low bound');
+  assert.deepEqual(seedRange(null, 0.5, 5, 30), { low: 5, high: 5.5 }, 'without a value start from the minimum');
+  assert.deepEqual(seedRange(21, 1, 5, 30), { low: 21, high: 22 }, 'the entity step drives the gap');
+  assert.deepEqual(seedRange(21, null, 5, 30), { low: 21, high: 21.5 }, 'an unusable step falls back to half a degree');
+});
+
+test('the schedule dialog wires the range toggle, the pair fields and the payload', () => {
+  const source = readFileSync(new URL('./custom_components/climate_flow_scheduler/www/climate-flow-card.js', import.meta.url), 'utf8');
+  // The toggle only appears where heat_cool exists, but an already dual slot
+  // keeps it so the user can go back to one temperature.
+  assert.match(source, /const rangeCapable = schedulableModes\(entity\)\.includes\('heat_cool'\)/);
+  assert.match(source, /if \(rangeCapable \|\| slot\.range\)/);
+  assert.match(source, /rangeInput\.addEventListener\('change'/);
+  // Switching on seeds a pair (live range when the entity has one), switching
+  // off reuses the low bound, which is already on the entity grid.
+  assert.match(source, /slot\.targetTempLow = liveLow; slot\.targetTempHigh = liveHigh;/);
+  assert.match(source, /seedRange\(slot\.temperature, effectiveStep\(entity, this\.config\.step\)/);
+  assert.match(source, /slot\.temperature = numeric\(slot\.targetTempLow\)/);
+  // The slot fields render one shape or the other, never both.
+  assert.match(source, /if \(slot\.range\) entries\.push\(\['targetTempLow', t\.targetLowField, 'number'\], \['targetTempHigh', t\.targetHighField, 'number'\]\)/);
+  assert.match(source, /else entries\.push\(\['temperature', t\.targetField, 'number'\]\)/);
+  // Save goes through the single payload builder and validates with the entity.
+  assert.match(source, /slots: this\._scheduleDraft\.slots\.map\(draftSlotPayload\)/);
+  assert.match(source, /validateScheduleDraft\(this\._scheduleDraft, t, entity\)/);
+  assert.doesNotMatch(source, /temperature: Number\(s\.temperature\)/, 'the inline single-shape payload is gone');
 });
 
 test('outside-schedule temperature validation and payload', () => {

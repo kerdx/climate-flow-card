@@ -11,9 +11,13 @@ from typing import Any
 
 _TIME = re.compile(r"^(?:[01]\d|2[0-3]):[0-5]\d$")
 _SLOT_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
-# Modes a program may set. heat_cool is excluded because a program uses a
-# single target temperature, which heat_cool cannot accept.
-_SCHEDULABLE_MODES = ("off", "heat", "cool", "auto", "dry", "fan_only")
+# Modes a program may set. heat_cool is available since slots can carry both
+# target temperatures; a program that selects it must use dual slots.
+_SCHEDULABLE_MODES = ("off", "heat", "cool", "auto", "dry", "fan_only", "heat_cool")
+# The two accepted slot shapes: one target, or the heat_cool pair. The key set
+# is exact in both cases, like every other slot rule below.
+SINGLE_TARGET_SLOT_KEYS = frozenset({"id", "days", "start", "end", "temperature"})
+DUAL_TARGET_SLOT_KEYS = frozenset({"id", "days", "start", "end", "target_temp_low", "target_temp_high"})
 
 
 class ScheduleError(ValueError):
@@ -164,6 +168,35 @@ def validate_single_target_mode(state_mode: Any, attribute_mode: Any = None) -> 
         raise ScheduleError("Schedules do not support heat_cool mode", "heat_cool_unsupported")
 
 
+def slot_is_dual(slot: Any) -> bool:
+    """Whether a validated slot carries the heat_cool pair instead of one value."""
+    return isinstance(slot, dict) and "target_temp_low" in slot
+
+
+def slot_target(slot: dict[str, Any]) -> float | tuple[float, float]:
+    """The value to apply: a float, or ``(low, high)`` for a dual slot."""
+    if slot_is_dual(slot):
+        return float(slot["target_temp_low"]), float(slot["target_temp_high"])
+    return float(slot["temperature"])
+
+
+def validate_dual_target(low: Any, high: Any, minimum: Any, maximum: Any, step: Any) -> tuple[float, float]:
+    """Validate both bounds on the entity grid, low strictly below high."""
+    low_value = validate_target(low, minimum, maximum, step)
+    high_value = validate_target(high, minimum, maximum, step)
+    if low_value >= high_value:
+        raise ScheduleError(
+            f"The low target {low_value:g} must stay below the high target {high_value:g}",
+            "dual_range_invalid", low=low_value, high=high_value,
+        )
+    return low_value, high_value
+
+
+def dual_needs_update(current_low: Any, current_high: Any, low: float, high: float, step: float) -> bool:
+    """Whether either bound differs from what the entity currently reports."""
+    return target_needs_update(current_low, low, step) or target_needs_update(current_high, high, step)
+
+
 def target_needs_update(current: Any, target: float, step: float) -> bool:
     """Compare targets using a small numeric tolerance, never half a climate step."""
     if current is None:
@@ -202,8 +235,12 @@ def validate_program(slots: Any, enabled: Any = False, away_temperature: Any = N
     ids: set[str] = set()
     occupied: dict[int, list[tuple[int, int, str]]] = {day: [] for day in range(1, 8)}
     for slot in slots:
-        if not isinstance(slot, dict) or set(slot) != {"id", "days", "start", "end", "temperature"}:
-            raise ScheduleError("Each slot requires exactly id, days, start, end, and temperature", "invalid_slot_schema")
+        if not isinstance(slot, dict):
+            raise ScheduleError("Each slot requires exactly id, days, start, end, and either temperature or target_temp_low with target_temp_high", "invalid_slot_schema")
+        keys = set(slot)
+        is_dual = keys == set(DUAL_TARGET_SLOT_KEYS)
+        if not is_dual and keys != set(SINGLE_TARGET_SLOT_KEYS):
+            raise ScheduleError("Each slot requires exactly id, days, start, end, and either temperature or target_temp_low with target_temp_high", "invalid_slot_schema")
         slot_id = slot["id"]
         if not isinstance(slot_id, str) or not _SLOT_ID.fullmatch(slot_id):
             raise ScheduleError("Slot id must be 1..64 ASCII letters, digits, dots, underscores, or hyphens; it must start alphanumeric", "invalid_slot_id")
@@ -218,8 +255,18 @@ def validate_program(slots: Any, enabled: Any = False, away_temperature: Any = N
         start, end = _minute(slot["start"]), _minute(slot["end"])
         if start == end:
             raise ScheduleError("start and end must differ", "same_start_end")
-        temperature = _temperature(slot["temperature"])
-        clean = {"id": slot_id, "days": list(days), "start": slot["start"], "end": slot["end"], "temperature": temperature}
+        temperature = _temperature(slot["temperature"]) if not is_dual else None
+        if is_dual:
+            low = _temperature(slot["target_temp_low"])
+            high = _temperature(slot["target_temp_high"])
+            if low >= high:
+                raise ScheduleError(
+                    f"The low target {low:g} must stay below the high target {high:g}",
+                    "dual_range_invalid", low=low, high=high,
+                )
+            clean = {"id": slot_id, "days": list(days), "start": slot["start"], "end": slot["end"], "target_temp_low": low, "target_temp_high": high}
+        else:
+            clean = {"id": slot_id, "days": list(days), "start": slot["start"], "end": slot["end"], "temperature": temperature}
         result.append(clean)
         for day in days:
             if end > start:
@@ -233,6 +280,13 @@ def validate_program(slots: Any, enabled: Any = False, away_temperature: Any = N
                     if lo < old_hi and old_lo < hi:
                         raise ScheduleError(f"Slots {old_id} and {slot_id} overlap", "slots_overlap", a=old_id, b=slot_id)
                 occupied[target_day].append((lo, hi, slot_id))
+    if mode == "heat_cool" and any(not slot_is_dual(slot) for slot in result):
+        # Checked here rather than at apply time: the program mode is known at
+        # save time, and heat_cool has no single temperature to send.
+        raise ScheduleError(
+            "A heat_cool program needs both temperatures in every slot",
+            "heat_cool_dual_required",
+        )
     return {"enabled": enabled, "slots": result, "away_temperature": away, "hvac_mode": mode}
 
 
@@ -261,17 +315,18 @@ def program_status(slots: list[dict[str, Any]], enabled: bool, now: datetime) ->
 AWAY_TARGET = "__away__"
 
 
-def resolve_target(slots: list[dict[str, Any]], away_temperature: Any, now: datetime) -> tuple[str | None, float | None]:
+def resolve_target(slots: list[dict[str, Any]], away_temperature: Any, now: datetime) -> tuple[str | None, float | tuple[float, float] | None]:
     """Return the target to apply as ``(kind, temperature)`` at ``now``.
 
     The kind is the active slot id, :data:`AWAY_TARGET` when only the
     outside-schedule temperature applies, or ``None`` when the program leaves
     the entity untouched (no active slot and no outside-schedule temperature).
-    A manual target change then stands until the kind changes.
+    A manual target change then stands until the kind changes. A dual slot
+    yields ``(low, high)``; the single-temperature cases stay floats.
     """
     slot = active_slot(slots, now)
     if slot is not None:
-        return slot["id"], float(slot["temperature"])
+        return slot["id"], slot_target(slot)
     if away_temperature is not None:
         return AWAY_TARGET, float(away_temperature)
     return None, None
@@ -414,7 +469,8 @@ def program_apply_key(mode: Any, target_kind: Any, target: Any) -> str:
     """Include override and pause temperatures in the cache identity."""
     key = f"{mode or '-'}|{target_kind or '-'}"
     if target_kind in ("__manual_override__", PAUSE_TARGET) and target is not None:
-        key += f"|{float(target).hex()}"
+        values = target if isinstance(target, tuple) else (target,)
+        key += "|" + ",".join(float(value).hex() for value in values)
     return key
 
 

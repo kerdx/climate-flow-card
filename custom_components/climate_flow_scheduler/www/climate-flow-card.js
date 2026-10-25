@@ -63,6 +63,12 @@ const STRINGS = {
     start: 'Start',
     end: 'End',
     targetField: 'Target',
+    targetLowField: 'Low temperature',
+    targetHighField: 'High temperature',
+    rangeToggle: 'Range',
+    rangeInvalid: 'The low temperature must stay below the high temperature.',
+    heat_coolNeedsRange: 'heat_cool needs a temperature range in every slot.',
+    dualSlotUnsupported: 'A slot with a temperature range needs heat_cool: change the program mode or use one temperature.',
     addSlot: '+ Add slot',
     deleteProgram: 'Delete program',
     saveProgram: 'Save program',
@@ -100,7 +106,7 @@ const STRINGS = {
       invalid_override_step: 'The override step must be a finite positive number.',
       invalid_time: 'Times must use the HH:MM 24-hour format.',
       invalid_temperature: 'Temperatures must be finite numbers.',
-      invalid_hvac_mode: "hvac_mode must be one of off, heat, cool, auto, dry, or fan_only.",
+      invalid_hvac_mode: "hvac_mode must be one of off, heat, cool, auto, dry, fan_only, or heat_cool.",
       unsupported_hvac_mode: 'HVAC mode {mode} is not available for this climate entity.',
       entity_validation_failed: 'The climate entity does not accept this program: {message}',
       entity_unavailable: 'The climate entity is unavailable; the target stays pending.',
@@ -124,6 +130,9 @@ const STRINGS = {
       target_outside_limits: 'Target {value} is outside the climate limits.',
       target_off_step: 'Target {value} is not aligned to the climate temperature step.',
       heat_cool_unsupported: 'Schedules do not support the heat_cool mode.',
+      heat_cool_dual_required: 'A heat_cool program needs both temperatures in every slot.',
+      dual_range_invalid: 'The low target {low} must stay below the high target {high}.',
+      dual_slot_unsupported: 'A slot with two target temperatures needs heat_cool: set the program mode to heat_cool or use one temperature.',
     },
     sections: {
       identity: 'Identity and appearance',
@@ -216,6 +225,12 @@ const STRINGS = {
     start: 'Inizio',
     end: 'Fine',
     targetField: 'Target',
+    targetLowField: 'Temperatura bassa',
+    targetHighField: 'Temperatura alta',
+    rangeToggle: 'Intervallo',
+    rangeInvalid: 'La temperatura bassa deve restare sotto quella alta.',
+    heat_coolNeedsRange: 'heat_cool richiede un intervallo di temperatura in ogni fascia.',
+    dualSlotUnsupported: 'Una fascia con intervallo richiede heat_cool: cambia la modalità del programma oppure usa una sola temperatura.',
     addSlot: '+ Aggiungi fascia',
     deleteProgram: 'Elimina programma',
     saveProgram: 'Salva programma',
@@ -250,7 +265,7 @@ const STRINGS = {
       invalid_override_step: 'Il passo dell’override deve essere un numero finito positivo.',
       invalid_time: 'Gli orari devono usare il formato 24 ore HH:MM.',
       invalid_temperature: 'Le temperature devono essere numeri finiti.',
-      invalid_hvac_mode: "hvac_mode deve essere uno di off, heat, cool, auto, dry o fan_only.",
+      invalid_hvac_mode: "hvac_mode deve essere uno di off, heat, cool, auto, dry, fan_only o heat_cool.",
       unsupported_hvac_mode: 'La modalità HVAC {mode} non è disponibile per questa entità climate.',
       entity_validation_failed: 'L\u2019entità climate non accetta questo programma: {message}',
       entity_unavailable: 'L\u2019entità climate non è disponibile; il target resta in attesa.',
@@ -274,6 +289,9 @@ const STRINGS = {
       target_outside_limits: 'Il target {value} è fuori dai limiti del climate.',
       target_off_step: 'Il target {value} non è allineato al passo temperatura del climate.',
       heat_cool_unsupported: 'Le pianificazioni non supportano la modalità heat_cool.',
+      heat_cool_dual_required: 'Un programma heat_cool richiede entrambe le temperature in ogni fascia.',
+      dual_range_invalid: 'Il limite basso {low} deve restare sotto il limite alto {high}.',
+      dual_slot_unsupported: 'Una fascia con due temperature richiede heat_cool: imposta la modalità del programma su heat_cool oppure usa una sola temperatura.',
     },
     sections: {
       identity: 'Identità e aspetto',
@@ -310,9 +328,9 @@ const STRINGS = {
     },
   },
 };
-// Modes a program may set; heat_cool is excluded because a program uses a
-// single target temperature, which heat_cool cannot accept.
-const SCHEDULABLE_MODES = ['off', 'heat', 'cool', 'auto', 'dry', 'fan_only'];
+// Modes a program may set; heat_cool is included now that a slot can carry
+// both target temperatures (the backend requires dual slots in that case).
+const SCHEDULABLE_MODES = ['off', 'heat', 'cool', 'auto', 'dry', 'fan_only', 'heat_cool'];
 export const resolveLanguage = (language) => (typeof language === 'string' && language.trim().toLowerCase().startsWith('it') ? 'it' : 'en');
 export const cardStrings = (language) => STRINGS[resolveLanguage(language)];
 export const fieldLabel = (strings, name) => strings.fields[name] || String(name ?? '').replaceAll('_', ' ');
@@ -345,9 +363,32 @@ export const effectiveStep = (entity, fallback = 0.5, override = null) => {
 
 export const scheduleDraft = (program) => ({ enabled: Boolean(program?.enabled), awayTemperature: program?.away_temperature ?? null, hvacMode: program?.hvac_mode ?? null, slots: (Array.isArray(program?.slots) ? program.slots : []).map((slot) => ({
   id: String(slot.id ?? ''), days: Array.isArray(slot.days) ? slot.days.filter((day) => Number.isInteger(day) && day >= 1 && day <= 7) : [],
-  start: String(slot.start ?? '08:00'), end: String(slot.end ?? '09:00'), temperature: slot.temperature,
+  start: String(slot.start ?? '08:00'), end: String(slot.end ?? '09:00'), temperature: slot.temperature ?? null,
+  // `range` is the editor's switch between the two slot shapes the backend
+  // accepts: exactly one target form per slot, never both.
+  range: slot.target_temp_low !== undefined && slot.target_temp_high !== undefined,
+  targetTempLow: slot.target_temp_low ?? null, targetTempHigh: slot.target_temp_high ?? null,
 })) });
-export const validateScheduleDraft = (draft, strings = STRINGS.en) => {
+// Seed a heat_cool pair from the single value a slot already has: on the
+// entity grid, inside its limits, low strictly below high.
+export const seedRange = (base, step, min, max) => {
+  const increment = numeric(step) !== null && numeric(step) > 0 ? numeric(step) : 0.5;
+  const floor = numeric(min), ceiling = numeric(max);
+  let low = numeric(base);
+  if (low === null) low = floor !== null ? floor : 0;
+  if (floor !== null) low = Math.max(low, floor);
+  if (ceiling !== null) low = Math.min(low, Math.max(floor ?? ceiling, ceiling - increment));
+  const high = ceiling !== null ? Math.min(low + increment, ceiling) : low + increment;
+  return { low, high };
+};
+// The one place that picks which target form goes on the wire for a slot.
+export const draftSlotPayload = (slot) => {
+  const base = { id: slot.id, days: [...(slot.days || [])].sort((a, b) => a - b), start: slot.start, end: slot.end };
+  return slot.range
+    ? { ...base, target_temp_low: Number(slot.targetTempLow), target_temp_high: Number(slot.targetTempHigh) }
+    : { ...base, temperature: Number(slot.temperature) };
+};
+export const validateScheduleDraft = (draft, strings = STRINGS.en, entity = undefined) => {
   if (!draft || typeof draft.enabled !== 'boolean' || !Array.isArray(draft.slots)) return strings.invalidSchedule;
   if (draft.enabled && draft.slots.length === 0) return strings.needSlot;
   const away = draft.awayTemperature;
@@ -355,7 +396,26 @@ export const validateScheduleDraft = (draft, strings = STRINGS.en) => {
   const mode = draft.hvacMode;
   if (mode !== null && mode !== undefined && mode !== '' && !SCHEDULABLE_MODES.includes(mode)) return strings.badMode;
   for (const slot of draft.slots) {
-    if (!slot.id || !Array.isArray(slot.days) || !slot.days.length || !/^([01]\d|2[0-3]):[0-5]\d$/.test(slot.start) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(slot.end) || slot.start === slot.end || slot.temperature === '' || numeric(slot.temperature) === null) return strings.slotInvalid;
+    if (!slot.id || !Array.isArray(slot.days) || !slot.days.length || !/^([01]\d|2[0-3]):[0-5]\d$/.test(slot.start) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(slot.end) || slot.start === slot.end) return strings.slotInvalid;
+    if (slot.range) {
+      const low = numeric(slot.targetTempLow), high = numeric(slot.targetTempHigh);
+      if (slot.targetTempLow === '' || slot.targetTempHigh === '' || low === null || high === null || low >= high) return strings.rangeInvalid;
+    } else if (slot.temperature === '' || numeric(slot.temperature) === null) {
+      return strings.slotInvalid;
+    }
+  }
+  // Shape rules mirroring the backend: heat_cool has no single temperature to
+  // send, and a range slot only exists in heat_cool. The mode/slot pairing is
+  // checked for a saved program (schema) and, when the entity is known, for an
+  // enabled one -- the same condition under which the backend validates it.
+  if (mode === 'heat_cool' && draft.slots.some((slot) => !slot.range)) return strings.heat_coolNeedsRange;
+  if (entity && draft.enabled && validState(entity.state)) {
+    const effectiveMode = mode || entity.state;
+    if (effectiveMode === 'heat_cool') {
+      if (draft.slots.some((slot) => !slot.range)) return strings.heat_coolNeedsRange;
+    } else if (effectiveMode !== 'off' && draft.slots.some((slot) => slot.range)) {
+      return strings.dualSlotUnsupported;
+    }
   }
   return null;
 };
@@ -1810,6 +1870,11 @@ export class ClimateFlowCard extends HTMLElementBase {
       .days .day{display:grid;place-items:center;min-width:38px;height:32px;padding:0 6px;border-radius:999px;background:var(--card-background-color,var(--ha-card-background));font-size:12px;font-weight:600;color:var(--secondary-text-color);transition:background .15s,color .15s}
       .days input:checked ~ .day{background:var(--climate-flow-accent-color,var(--primary-color));color:var(--text-primary-color,#fff)}
       .days input:focus-visible ~ .day{outline:2px solid var(--primary-color);outline-offset:2px}
+      .slot .range-toggle{position:relative;cursor:pointer;display:flex;align-items:center}
+      .slot .range-toggle input{position:absolute;opacity:0;width:1px;height:1px;margin:0;inset:auto}
+      .slot .range-toggle .day{display:grid;place-items:center;height:32px;padding:0 10px;border-radius:999px;background:var(--card-background-color,var(--ha-card-background));border:1px solid var(--divider-color);font-size:12px;font-weight:600;color:var(--secondary-text-color);transition:background .15s,color .15s}
+      .slot .range-toggle input:checked ~ .day{background:var(--climate-flow-accent-color,var(--primary-color));color:var(--text-primary-color,#fff);border-color:transparent}
+      .slot .range-toggle input:focus-visible ~ .day{outline:2px solid var(--primary-color);outline-offset:2px}
       .field{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
       .field label{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--secondary-text-color)}
       .field input{font:inherit;font-size:14px;color:var(--primary-text-color);background:var(--card-background-color,var(--ha-card-background));border:1px solid var(--divider-color);border-radius:10px;padding:7px 10px}
@@ -1900,12 +1965,41 @@ export class ClimateFlowCard extends HTMLElementBase {
       awayInput.addEventListener('input', () => this._scheduleDraft.awayTemperature = awayInput.value);
       awayLabel.append(awayInput); awayField.append(awayLabel); body.append(awayField);
       const slots = document.createElement('div');
+      // A range toggle only makes sense where heat_cool exists; an already
+      // dual slot keeps it so the user can always go back to one temperature.
+      const rangeCapable = schedulableModes(entity).includes('heat_cool');
       const renderSlots = () => { slots.replaceChildren(); this._scheduleDraft.slots.forEach((slot, index) => {
         const box = document.createElement('section'); box.className = 'slot';
         const slotHead = document.createElement('div'); slotHead.className = 'slot-head';
         const title = document.createElement('h3'); title.textContent = t.slot(index + 1);
         const remove = document.createElement('button'); remove.className = 'remove'; remove.textContent = t.remove; remove.setAttribute('aria-label', t.removeSlot(index + 1)); remove.addEventListener('click', () => { this._scheduleDraft.slots.splice(index, 1); renderSlots(); });
-        slotHead.append(title, remove); box.append(slotHead);
+        slotHead.append(title);
+        if (rangeCapable || slot.range) {
+          const rangeLabel = document.createElement('label'); rangeLabel.className = 'range-toggle';
+          const rangeInput = document.createElement('input'); rangeInput.type = 'checkbox'; rangeInput.checked = Boolean(slot.range); rangeInput.setAttribute('aria-label', t.rangeToggle);
+          rangeInput.addEventListener('change', () => {
+            if (rangeInput.checked) {
+              slot.range = true;
+              if (slot.targetTempLow === null || slot.targetTempHigh === null) {
+                // Prefer what the entity already reports for heat_cool, then
+                // one step above the single value the slot had.
+                const liveLow = numeric(entity?.attributes?.target_temp_low), liveHigh = numeric(entity?.attributes?.target_temp_high);
+                if (liveLow !== null && liveHigh !== null && liveLow < liveHigh) { slot.targetTempLow = liveLow; slot.targetTempHigh = liveHigh; }
+                else { const seeded = seedRange(slot.temperature, effectiveStep(entity, this.config.step), entity?.attributes?.min_temp, entity?.attributes?.max_temp); slot.targetTempLow = seeded.low; slot.targetTempHigh = seeded.high; }
+              }
+            } else {
+              // Going back takes the low bound: it is already on the entity
+              // grid, so it is a valid target as it is. When the pair was
+              // cleared, the single value the slot came with stays.
+              slot.range = false;
+              if (numeric(slot.targetTempLow) !== null) slot.temperature = numeric(slot.targetTempLow);
+            }
+            renderSlots();
+          });
+          const rangeText = document.createElement('span'); rangeText.className = 'day'; rangeText.textContent = t.rangeToggle;
+          rangeLabel.append(rangeInput, rangeText); slotHead.append(rangeLabel);
+        }
+        slotHead.append(remove); box.append(slotHead);
         const days = document.createElement('div'); days.className = 'days'; t.dayNames.forEach((name, i) => {
           // Pill text comes from the day index (unique two-letter label); the
           // checkbox keeps the full accessible name and its ISO weekday i + 1.
@@ -1913,19 +2007,23 @@ export class ClimateFlowCard extends HTMLElementBase {
           const pill = document.createElement('span'); pill.className = 'day'; pill.textContent = t.dayPills[i]; label.append(cb, pill); days.append(label);
         }); box.append(days);
         const field = document.createElement('div'); field.className = 'field';
-        for (const [key, labelText, type] of [['start', t.start, 'time'], ['end', t.end, 'time'], ['temperature', t.targetField, 'number']]) {
+        // One target form per slot: a single value, or the heat_cool pair.
+        const entries = [['start', t.start, 'time'], ['end', t.end, 'time']];
+        if (slot.range) entries.push(['targetTempLow', t.targetLowField, 'number'], ['targetTempHigh', t.targetHighField, 'number']);
+        else entries.push(['temperature', t.targetField, 'number']);
+        for (const [key, labelText, type] of entries) {
           const label = document.createElement('label'); label.textContent = labelText;
-          const input = document.createElement('input'); input.type = type; input.value = String(slot[key]); if (key === 'temperature') input.step = 'any'; input.setAttribute('aria-label', labelText); input.addEventListener('input', () => slot[key] = input.value);
+          const input = document.createElement('input'); input.type = type; input.value = slot[key] === null || slot[key] === undefined ? '' : String(slot[key]); if (type === 'number') input.step = 'any'; input.setAttribute('aria-label', labelText); input.addEventListener('input', () => slot[key] = input.value);
           label.append(input); field.append(label);
         }
         box.append(field); slots.append(box);
       })}; renderSlots(); body.append(slots);
       const error = document.createElement('p'); error.className = 'error'; error.textContent = this._scheduleError || '';
-      const add = document.createElement('button'); add.className = 'btn ghost'; add.textContent = t.addSlot; add.addEventListener('click', () => { this._scheduleDraft.slots.push({ id: globalThis.crypto?.randomUUID?.() || `slot-${Date.now()}-${Math.random().toString(36).slice(2)}`, days: [1], start: '08:00', end: '09:00', temperature: 20 }); renderSlots(); });
+      const add = document.createElement('button'); add.className = 'btn ghost'; add.textContent = t.addSlot; add.addEventListener('click', () => { this._scheduleDraft.slots.push({ id: globalThis.crypto?.randomUUID?.() || `slot-${Date.now()}-${Math.random().toString(36).slice(2)}`, days: [1], start: '08:00', end: '09:00', temperature: 20, range: false, targetTempLow: null, targetTempHigh: null }); renderSlots(); });
       body.append(add); body.append(error);
       const actions = document.createElement('div'); actions.className = 'dlg-actions';
       const del = document.createElement('button'); del.className = 'btn danger'; del.textContent = t.deleteProgram; del.addEventListener('click', async () => { try { await this._hass.callService('climate_flow_scheduler', 'delete_program', { climate_entity: this.config.entity }); this._closeSchedule(dialog); } catch (err) { error.textContent = errorLabel(t, err?.message || err); } }); actions.append(del);
-      const save = document.createElement('button'); save.className = 'btn primary'; save.textContent = t.saveProgram; save.addEventListener('click', async () => { const issue = validateScheduleDraft(this._scheduleDraft, t); if (issue) { error.textContent = issue; return; } try { await this._hass.callService('climate_flow_scheduler', 'save_program', { climate_entity: this.config.entity, enabled: this._scheduleDraft.enabled, slots: this._scheduleDraft.slots.map((s) => ({ id: s.id, days: [...s.days].sort((a, b) => a - b), start: s.start, end: s.end, temperature: Number(s.temperature) })), away_temperature: awayTemperaturePayload(this._scheduleDraft.awayTemperature), hvac_mode: this._scheduleDraft.hvacMode || null }); this._closeSchedule(dialog); } catch (err) { error.textContent = errorLabel(t, err?.message || err); } }); actions.append(save);
+      const save = document.createElement('button'); save.className = 'btn primary'; save.textContent = t.saveProgram; save.addEventListener('click', async () => { const issue = validateScheduleDraft(this._scheduleDraft, t, entity); if (issue) { error.textContent = issue; return; } try { await this._hass.callService('climate_flow_scheduler', 'save_program', { climate_entity: this.config.entity, enabled: this._scheduleDraft.enabled, slots: this._scheduleDraft.slots.map(draftSlotPayload), away_temperature: awayTemperaturePayload(this._scheduleDraft.awayTemperature), hvac_mode: this._scheduleDraft.hvacMode || null }); this._closeSchedule(dialog); } catch (err) { error.textContent = errorLabel(t, err?.message || err); } }); actions.append(save);
       body.append(actions);
     }
     dialog.addEventListener('cancel', (event) => { event.preventDefault(); this._closeSchedule(dialog); }); this.shadowRoot.append(dialog);
