@@ -38,6 +38,13 @@ layout: pill # or compact
 # Optional look, both set from the card editor as well:
 # accent_color: "#3f9cf4" # accent for icon, chips, slider and calendar button; remove it to follow the theme again
 # surface: default # default | elevated (contrast and depth) | blend (no background, for dark dashboards)
+# main_temperature: target # target | current: which temperature takes the prominent slot
+# show_entity_picture: false # replace the circular icon with the entity picture
+# language: auto # auto | en | it: fixes the card language independently of the interface
+# Optional background actions (the default tap still toggles heating off/on):
+# tap_action: toggle # toggle | more-info | none
+# hold_action: none # toggle | more-info | none (long press)
+# double_tap_action: none # toggle | more-info | none
 ```
 
 No legacy card-tag or layout aliases are supported.

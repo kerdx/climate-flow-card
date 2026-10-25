@@ -17,6 +17,8 @@ const STRINGS = {
     targetUnavailable: 'Target unavailable',
     openDetails: (label) => `${label}. Open details`,
     toggleHeating: 'Tap card background to toggle heating',
+    actionMoreInfo: 'Tap card background to open the entity details',
+    actionNone: 'Climate card, no background action',
     temperatureControls: 'Temperature controls',
     openSchedule: 'Open schedule details',
     midpoint: 'Target temperature range midpoint',
@@ -78,6 +80,9 @@ const STRINGS = {
       show_humidity_chip: 'Show humidity', show_unavailable_badge: 'Show unavailable badge',
        show_mode_buttons: 'Show HVAC mode selector', show_step_controls: 'Show +/- controls', show_schedule_button: 'Show schedule button',
       accent_color: 'Accent colour', surface: 'Card surface',
+      language: 'Language', entity_picture: 'Entity picture',
+      show_entity_picture: 'Show entity picture', main_temperature: 'Main temperature',
+      tap_action: 'Tap action', hold_action: 'Hold action', double_tap_action: 'Double tap action',
     },
     modes: { heat: 'Heat', cool: 'Cool', off: 'Off', auto: 'Auto', heat_cool: 'Heat / cool', dry: 'Dry', fan_only: 'Fan only' },
     statuses: { heating: 'Heating', cooling: 'Cooling', drying: 'Drying', fan: 'Fan', idle: 'Idle', off: 'Off', preheating: 'Preheating', defrosting: 'Defrosting', heat: 'Heat', cool: 'Cool', auto: 'Auto', heat_cool: 'Heat / cool', dry: 'Dry', fan_only: 'Fan only' },
@@ -140,6 +145,13 @@ const STRINGS = {
        show_schedule_button: 'Show the standalone calendar pill that opens the weekly scheduler.',
       accent_color: 'Overrides the accent colour used by the icon, chips, slider and calendar button. Empty follows the theme colour.',
       surface: 'Card background: default follows the theme, elevated adds contrast and depth, blend drops the background for dark dashboards.',
+      language: 'Card language; auto follows the Home Assistant interface language.',
+      entity_picture: 'Picture URL used instead of the icon; the entity picture is used when this is empty.',
+      show_entity_picture: 'Show the picture in place of the circular icon.',
+      main_temperature: 'Which temperature takes the prominent slot; the other one moves to the secondary chip.',
+      tap_action: 'What a tap on the card background does.',
+      hold_action: 'What a long press on the card background does.',
+      double_tap_action: 'What a double tap on the card background does.',
     },
   },
   it: {
@@ -153,6 +165,8 @@ const STRINGS = {
     targetUnavailable: 'Target non disponibile',
     openDetails: (label) => `${label}. Apri dettagli`,
     toggleHeating: 'Tocca lo sfondo della scheda per alternare riscaldamento e spento',
+    actionMoreInfo: 'Tocca lo sfondo della scheda per aprire i dettagli',
+    actionNone: 'Card climate, nessuna azione sullo sfondo',
     temperatureControls: 'Controlli temperatura',
     openSchedule: 'Apri la pianificazione',
     midpoint: 'Punto medio intervallo temperatura target',
@@ -214,6 +228,9 @@ const STRINGS = {
       show_humidity_chip: 'Mostra umidità', show_unavailable_badge: 'Mostra badge non disponibile',
        show_mode_buttons: 'Mostra selettore modalità HVAC', show_step_controls: 'Mostra controlli +/−', show_schedule_button: 'Mostra pulsante pianificazione',
       accent_color: 'Colore accento', surface: 'Sfondo card',
+      language: 'Lingua', entity_picture: 'Foto entità',
+      show_entity_picture: 'Mostra foto entità', main_temperature: 'Temperatura principale',
+      tap_action: 'Azione al tocco', hold_action: 'Azione alla pressione lunga', double_tap_action: 'Azione al doppio tocco',
     },
     modes: { heat: 'Caldo', cool: 'Freddo', off: 'Spento', auto: 'Automatico', heat_cool: 'Caldo / freddo', dry: 'Deumidificazione', fan_only: 'Solo ventilazione' },
     statuses: { heating: 'Riscaldamento', cooling: 'Raffreddamento', drying: 'Deumidificazione', fan: 'Ventilazione', idle: 'Inattivo', off: 'Spento', preheating: 'Preriscaldamento', defrosting: 'Sbrinamento', heat: 'Caldo', cool: 'Freddo', auto: 'Automatico', heat_cool: 'Caldo / freddo', dry: 'Deumidificazione', fan_only: 'Solo ventilazione' },
@@ -273,6 +290,13 @@ const STRINGS = {
        show_schedule_button: 'Mostra la pillola calendario che apre la pianificazione settimanale.',
       accent_color: 'Sovrascrive il colore accento di icona, chip, cursore e pulsante calendario. Vuoto segue il colore del tema.',
       surface: 'Sfondo della card: default segue il tema, elevated aggiunge contrasto e profondità, blend elimina lo sfondo per le dashboard scure.',
+      language: 'Lingua della card; auto segue la lingua dell’interfaccia di Home Assistant.',
+      entity_picture: 'URL della foto usata al posto dell’icona; se vuoto usa la foto dell’entità.',
+      show_entity_picture: 'Mostra la foto al posto dell’icona circolare.',
+      main_temperature: 'Quale temperatura occupa lo slot principale; l’altra passa alla chip secondaria.',
+      tap_action: 'Cosa fa un tocco sullo sfondo della card.',
+      hold_action: 'Cosa fa una pressione lunga sullo sfondo della card.',
+      double_tap_action: 'Cosa fa un doppio tocco sullo sfondo della card.',
     },
   },
 };
@@ -412,6 +436,36 @@ export const paintSliderFill = (slider) => {
   if (slider?.style?.setProperty) slider.style.setProperty('--fill', `${sliderFillPercent(slider)}%`);
   return slider;
 };
+// Card actions: what a tap, a long press and a double tap do on the card
+// background. `toggle` is the historic behaviour (switch heating on/off),
+// `more-info` opens the entity details, `none` leaves the gesture inert.
+export const CARD_ACTIONS = ['toggle', 'more-info', 'none'];
+export const normalizeCardAction = (value, fallback) => (CARD_ACTIONS.includes(value) ? value : fallback);
+// Per-mode accents, so a card reads as heating or cooling at a glance. An
+// explicit accent_color always wins; a missing entry means "use the theme".
+export const MODE_ACCENTS = { heat: '#f59f42', cool: '#71c0ff', dry: '#7fd0c8', auto: '#c5a66f', fan_only: '#83d39c' };
+export const modeAccentColor = (state) => {
+  const accent = typeof state === 'string' ? MODE_ACCENTS[state] : undefined;
+  return typeof accent === 'string' && /^#[0-9a-f]{6}$/i.test(accent) ? accent.toLowerCase() : null;
+};
+// Card language: `auto` follows the Home Assistant interface language.
+export const cardLanguage = (config, hassLocale) => (config?.language && config.language !== 'auto' ? config.language : hassLocale);
+// Which temperature owns the prominent slot of a layout; the other one falls
+// back to the secondary chip. Every layout renders the same decision.
+export const mainTemperatureKind = (value) => (value === 'current' ? 'current' : 'target');
+// The hero slot prefers the configured temperature and falls back to the other
+// one when its value is missing (no current reading, no target), so the card
+// never shows an empty hero next to a chip that could have filled it. The chip
+// then carries whichever value the hero is not showing.
+export const heroTemperaturePlan = (options = {}) => {
+  const { hasTarget = false, hasCurrent = false, main = 'target' } = options;
+  const want = mainTemperatureKind(main);
+  const other = want === 'current' ? 'target' : 'current';
+  const available = { target: Boolean(hasTarget), current: Boolean(hasCurrent) };
+  const hero = available[want] ? want : available[other] ? other : null;
+  const chip = hero === 'target' ? 'current' : 'target';
+  return { hero, chip: available[chip] ? chip : null };
+};
 export const isClimateActive = (entityOrState) => {
   const state = typeof entityOrState === 'string' ? entityOrState : entityOrState?.state;
   if (typeof state !== 'string') return false;
@@ -549,6 +603,33 @@ export const defaultCardConfig = (entity = 'climate.example') => ({
 export const getEntitySuggestion = (_hass, entityId) => typeof entityId === 'string' && entityId.startsWith('climate.')
   ? { config: { type: 'custom:climate-flow-card', ...defaultCardConfig(entityId) } }
   : null;
+// Defaults for the options that carry no key in defaultCardConfig. The editor
+// resolves a missing key through cardDefault, so it can show the real value
+// without ever writing it back to the YAML.
+export const CARD_OPTION_DEFAULTS = {
+  language: 'auto', main_temperature: 'target', surface: 'default', show_entity_picture: false,
+  tap_action: 'toggle', hold_action: 'none', double_tap_action: 'none',
+};
+export const cardDefault = (name, entity) => {
+  const base = defaultCardConfig(entity);
+  return Object.hasOwn(base, name) ? base[name] : CARD_OPTION_DEFAULTS[name];
+};
+// The editor keeps the user's YAML clean: any value equal to its default is
+// dropped, empty optional values are dropped too, and `entity` is never
+// removable (a config without it would be rejected by setConfig).
+export const stripCardDefaults = (config) => {
+  const next = { ...config };
+  for (const key of Object.keys(next)) {
+    if (key === 'entity' || key === 'type') continue;
+    const fallback = cardDefault(key, next.entity);
+    if (fallback === undefined) {
+      if (next[key] === '' || next[key] === null || next[key] === undefined) delete next[key];
+      continue;
+    }
+    if (next[key] === fallback) delete next[key];
+  }
+  return next;
+};
 
 const field = (name, selector) => ({ name, selector });
 const grid = (name, schema) => ({ type: 'grid', name, schema });
@@ -561,13 +642,21 @@ export const configSchema = [
     field('layout', { select: { mode: 'dropdown', options: ['pill', 'compact'] } }),
     field('accent_color', { color: {} }),
     field('surface', { select: { mode: 'dropdown', options: CARD_SURFACES } }),
+    field('language', { select: { mode: 'dropdown', options: ['auto', 'en', 'it'] } }),
+    field('entity_picture', { text: {} }),
   ]),
-  grid('chips', ['show_state_chip', 'show_current_temperature_chip', 'show_humidity_chip', 'show_unavailable_badge'].map((name) => field(name, { boolean: {} }))),
+  grid('chips', [
+    ...['show_state_chip', 'show_current_temperature_chip', 'show_humidity_chip', 'show_unavailable_badge', 'show_entity_picture'].map((name) => field(name, { boolean: {} })),
+    field('main_temperature', { select: { mode: 'dropdown', options: ['target', 'current'] } }),
+  ]),
   // Advanced controls are grouped separately: new presets omit step so the
   // entity's declared target_temp_step is respected by default.
   expandable('controls', [
     ...['show_mode_buttons', 'show_step_controls', 'show_schedule_button'].map((name) => field(name, { boolean: {} })),
     field('step', { number: { min: 0.01, max: 10, step: 0.01, mode: 'box' } }),
+    field('tap_action', { select: { mode: 'dropdown', options: CARD_ACTIONS } }),
+    field('hold_action', { select: { mode: 'dropdown', options: CARD_ACTIONS } }),
+    field('double_tap_action', { select: { mode: 'dropdown', options: CARD_ACTIONS } }),
   ]),
 ];
 export const configSchemaFields = () => {
@@ -627,15 +716,26 @@ export class ClimateFlowCardEditor extends HTMLElementBase {
     if (this._preview) this._preview.hass = value;
   }
   setConfig(config) {
-    const merged = { ...defaultCardConfig(config?.entity || 'climate.example'), ...config, layout: normalizeLayout(config?.layout) || 'pill' };
+    // The editor keeps the user's YAML as it is: defaults are resolved per
+    // control through _value instead of being copied into the config we emit
+    // back, so only what the user actually changes reaches the YAML.
+    const raw = { ...(config || {}) };
     // A null/empty step is "follow the entity": keep it out of the config so
     // the card never receives a value it would reject.
-    if (merged.step === null || merged.step === undefined || (typeof merged.step === 'string' && !merged.step.trim())) delete merged.step;
-    this._config = merged;
+    if (raw.step === null || raw.step === undefined || (typeof raw.step === 'string' && !raw.step.trim())) delete raw.step;
+    this._config = stripCardDefaults(raw);
     this._render();
+  }
+  _value(name, options) {
+    if (name in this._config) return this._config[name];
+    const fallback = cardDefault(name, this._config?.entity);
+    if (fallback !== undefined) return fallback;
+    return options ? options[0] : undefined;
   }
   connectedCallback() { this._widenDialog(true); }
   disconnectedCallback() { this._widenDialog(false); }
+  // The editor follows the Home Assistant interface language: the card-level
+  // `language` option is a display setting of the card itself.
   _strings() { return cardStrings(this._hass?.locale?.language); }
   // The Home Assistant edit dialog splits its width between the form and HA's
   // own preview: its title click toggles `large`, which removes the 1000px cap
@@ -729,7 +829,7 @@ export class ClimateFlowCardEditor extends HTMLElementBase {
     if (globalThis.customElements?.get?.('ha-entity-picker')) {
       control = document.createElement('ha-entity-picker');
       control.hass = this._hass;
-      control.value = this._config[item.name] || '';
+      control.value = this._value(item.name) || '';
       control.includeDomains = ['climate'];
       control.setAttribute('aria-label', fieldLabel(strings, item.name));
       control.addEventListener('value-changed', (event) => { event.stopPropagation(); const value = event.detail?.value; if (typeof value === 'string' && /^climate\./.test(value)) this._setField(item.name, value); });
@@ -739,7 +839,7 @@ export class ClimateFlowCardEditor extends HTMLElementBase {
       control.type = 'text';
       control.className = 'ed-input';
       control.placeholder = 'climate.living_room';
-      control.value = this._config[item.name] || '';
+      control.value = this._value(item.name) || '';
       control.setAttribute('aria-label', fieldLabel(strings, item.name));
       // Free text is accepted while typing but only a climate id is stored.
       control.addEventListener('input', () => { if (/^climate\./.test(control.value.trim())) this._setField(item.name, control.value.trim()); });
@@ -757,7 +857,7 @@ export class ClimateFlowCardEditor extends HTMLElementBase {
     input.type = 'checkbox';
     input.className = 'sw';
     input.setAttribute('role', 'switch');
-    input.checked = Boolean(this._config[item.name]);
+    input.checked = Boolean(this._value(item.name));
     input.setAttribute('aria-label', fieldLabel(strings, item.name));
     input.addEventListener('change', () => this._setField(item.name, input.checked));
     row.append(input);
@@ -772,7 +872,7 @@ export class ClimateFlowCardEditor extends HTMLElementBase {
     input.type = 'text';
     input.className = 'ed-input';
     if (item.name === 'icon') input.placeholder = 'mdi:thermostat';
-    input.value = this._config[item.name] ?? '';
+    input.value = this._value(item.name) ?? '';
     input.setAttribute('aria-label', fieldLabel(strings, item.name));
     input.addEventListener('input', () => {
       const value = input.value.trim();
@@ -794,7 +894,7 @@ export class ClimateFlowCardEditor extends HTMLElementBase {
     input.min = String(item.selector.number.min ?? 0.01);
     input.step = String(item.selector.number.step ?? 0.01);
     input.placeholder = 'auto';
-    input.value = this._config[item.name] ?? '';
+    input.value = this._value(item.name) ?? '';
     input.setAttribute('aria-label', fieldLabel(strings, item.name));
     input.addEventListener('input', () => {
       const value = numeric(input.value);
@@ -819,7 +919,7 @@ export class ClimateFlowCardEditor extends HTMLElementBase {
     // An unset choice reads as the first option, which is always the default
     // (layout ships a value, surface ships none and starts on "default").
     group._options = options;
-    const current = this._config[item.name] ?? options[0];
+    const current = this._value(item.name, options);
     for (const option of options) {
       const button = document.createElement('button');
       button.type = 'button';
@@ -840,7 +940,7 @@ export class ClimateFlowCardEditor extends HTMLElementBase {
     wrap.className = 'ed-color';
     const input = document.createElement('input');
     input.type = 'color';
-    const current = normalizeAccentColor(this._config[item.name]);
+    const current = normalizeAccentColor(this._value(item.name));
     input.value = current || this._themeAccent();
     input.setAttribute('aria-label', fieldLabel(strings, item.name));
     const reset = document.createElement('button');
@@ -866,9 +966,13 @@ export class ClimateFlowCardEditor extends HTMLElementBase {
     } catch { return '#00a5a5'; }
   }
   _setField(name, value) {
-    const next = { ...this._config };
-    if (value === undefined || value === null) delete next[name];
-    else next[name] = value;
+    // Anything equal to its default is dropped, so the emitted YAML only ever
+    // carries what the user actually changed (and legacy configs written by an
+    // older version are cleaned up on the first edit).
+    const draft = { ...this._config };
+    if (value === undefined || value === null || value === '') delete draft[name];
+    else draft[name] = value;
+    const next = stripCardDefaults(draft);
     if (sameCardConfig(this._config, next)) return;
     this._config = next;
     this.dispatchEvent(new CustomEvent('config-changed', { detail: { config: { ...this._config } }, ['bub' + 'bles']: true, composed: true }));
@@ -889,11 +993,10 @@ export class ClimateFlowCardEditor extends HTMLElementBase {
         if (accent) control.value = accent;
         if (row._colorReset) row._colorReset.disabled = !accent;
       } else if (control.classList?.contains('ed-seg')) {
-        const options = control._options || [];
-        const current = this._config[name] ?? options[0];
+        const current = this._value(name, control._options || []);
         for (const button of control.children) button.setAttribute('aria-pressed', String(current === button.textContent));
       } else if (control !== active) {
-        const value = this._config[name] ?? '';
+        const value = this._value(name) ?? '';
         if (String(control.value ?? '') !== String(value)) control.value = value;
       }
     }
@@ -921,6 +1024,12 @@ export class ClimateFlowCard extends HTMLElementBase {
     // silently ignored, and the editor can only produce values we accept.
     if (config.accent_color !== undefined && config.accent_color !== null && config.accent_color !== '' && !normalizeAccentColor(config.accent_color)) throw new Error('accent_color must be a hex colour like "#3f9cf4".');
     if (config.surface !== undefined && config.surface !== null && config.surface !== '' && !CARD_SURFACES.includes(config.surface)) throw new Error(`surface must be one of ${CARD_SURFACES.join(', ')}.`);
+    for (const key of ['tap_action', 'hold_action', 'double_tap_action']) {
+      const value = config[key];
+      if (value !== undefined && value !== null && value !== '' && !CARD_ACTIONS.includes(value)) throw new Error(`${key} must be one of ${CARD_ACTIONS.join(', ')}.`);
+    }
+    if (config.main_temperature !== undefined && config.main_temperature !== null && config.main_temperature !== '' && !['target', 'current'].includes(config.main_temperature)) throw new Error('main_temperature must be "target" or "current".');
+    if (config.language !== undefined && config.language !== null && config.language !== '' && !['auto', 'en', 'it'].includes(config.language)) throw new Error('language must be "auto", "en" or "it".');
     // An empty step (null, '' or whitespace) means "follow the entity": the
     // editor emits null when the box is cleared, and throwing there would make
     // every toggle in the card editor look broken.
@@ -938,11 +1047,22 @@ export class ClimateFlowCard extends HTMLElementBase {
     else delete this.config.accent_color;
     if (this.config.surface !== undefined && this.config.surface !== null && this.config.surface !== '') this.config.surface = normalizeSurface(this.config.surface);
     else delete this.config.surface;
+    // Interaction and display options are normalised the same way, so the
+    // render can read them without re-checking what the YAML contained.
+    this.config.tap_action = normalizeCardAction(this.config.tap_action, 'toggle');
+    this.config.hold_action = normalizeCardAction(this.config.hold_action, 'none');
+    this.config.double_tap_action = normalizeCardAction(this.config.double_tap_action, 'none');
+    this.config.main_temperature = mainTemperatureKind(this.config.main_temperature);
+    if (typeof this.config.entity_picture === 'string') {
+      const picture = this.config.entity_picture.trim();
+      if (picture) this.config.entity_picture = picture;
+      else delete this.config.entity_picture;
+    } else delete this.config.entity_picture;
     if (!this.shadowRoot) this.attachShadow({ mode: 'open' });
     this._renderPreservingDeltaFocus();
   }
   set hass(hass) { this._hass = hass; this._reconcileOptimistic(); this._renderPreservingDeltaFocus(); }
-  disconnectedCallback() { clearTimeout(this._optimisticTimer); this._optimisticTimer = null; this._optimistic = null; }
+  disconnectedCallback() { clearTimeout(this._optimisticTimer); this._optimisticTimer = null; this._optimistic = null; clearTimeout(this._tapTimer); this._tapTimer = null; clearTimeout(this._holdTimer); this._holdTimer = null; this._holdFired = false; this._lastTapAt = 0; }
   getCardSize() { return this.config?.layout === 'compact' ? 2 : 1; }
   _service(domain, service, data) {
     if (!this._hass) return Promise.resolve();
@@ -951,8 +1071,24 @@ export class ClimateFlowCard extends HTMLElementBase {
       return undefined;
     });
   }
+  _strings() { return cardStrings(cardLanguage(this.config, this._hass?.locale?.language)); }
+  _actionLabel(strings) {
+    const action = this.config?.tap_action;
+    return action === 'more-info' ? strings.actionMoreInfo : action === 'none' ? strings.actionNone : strings.toggleHeating;
+  }
+  _runCardAction(action) {
+    // The only action that needs no entity lookup is `none`; `toggle` falls
+    // back silently when the entity cannot be toggled (e.g. heat-only).
+    if (action === 'none') return;
+    if (action === 'more-info') {
+      this.dispatchEvent(new CustomEvent('hass-more-info', { detail: { entityId: this.config.entity }, ['bub' + 'bles']: true, composed: true }));
+      return;
+    }
+    const mode = hvacToggleMode(this._hass?.states?.[this.config.entity]);
+    if (mode) this._service('climate', 'set_hvac_mode', { entity_id: this.config.entity, hvac_mode: mode });
+  }
   _showServiceError(error) {
-    const t = cardStrings(this._hass?.locale?.language);
+    const t = this._strings();
     let alert = this.shadowRoot?.querySelector('.card-service-error');
     if (!alert && this.shadowRoot) {
       alert = document.createElement('div'); alert.className = 'card-service-error'; alert.setAttribute('role', 'alert'); alert.setAttribute('aria-live', 'assertive');
@@ -998,10 +1134,28 @@ export class ClimateFlowCard extends HTMLElementBase {
     // picks the configured value up in both layouts without duplication.
     const card = this.shadowRoot?.querySelector?.('ha-card');
     if (!card) return;
-    const accent = normalizeAccentColor(this.config?.accent_color);
+    // Accent precedence: the explicit choice, then the active mode's colour,
+    // then the theme. It is read fresh on every render, so switching from heat
+    // to off drops back to the theme accent by itself.
+    const accent = normalizeAccentColor(this.config?.accent_color) || modeAccentColor(this._hass?.states?.[this.config?.entity]?.state);
     if (accent) card.style.setProperty('--climate-flow-accent-color', accent);
     else card.style.removeProperty('--climate-flow-accent-color');
     card.dataset.surface = normalizeSurface(this.config?.surface);
+  }
+  _paintIcon(box, glyph, picture) {
+    // The entity picture replaces the glyph without removing the ha-icon node
+    // the render already resolved; without a picture the glyph comes back.
+    if (!box || !glyph) return;
+    const existing = box.querySelector('img');
+    if (!picture) { existing?.remove(); glyph.hidden = false; return; }
+    if (!existing || existing.getAttribute('src') !== picture) {
+      const image = document.createElement('img');
+      image.alt = '';
+      image.src = picture;
+      existing?.remove();
+      box.append(image);
+    }
+    glyph.hidden = true;
   }
   _renderPill() {
     const c = this.config, e = this._displayEntity(this._hass?.states?.[c.entity]), a = e?.attributes || {};
@@ -1016,12 +1170,15 @@ export class ClimateFlowCard extends HTMLElementBase {
     const step = effectiveStep(e, c.step, this._stepOverride);
     const adjustable = hasTarget && model.controllable && step !== null && step > 0;
     const locale = this._hass?.locale?.language;
-    const t = cardStrings(locale);
+    const t = this._strings();
     const statusText = unavailable ? '' : this._statusDisplay(e, t);
     const relativeText = unavailable ? '' : this._relativeDisplay(e);
     const humidityValue = numeric(a.current_humidity);
     const scheduleActive = isScheduleEnabled(this._scheduleProgram());
     const modeList = modes(e).filter((m) => valid(m));
+    // main_temperature picks the prominent slot (the setpoint here) and the
+    // chip always carries the other value; the default keeps today's look.
+    const picture = c.show_entity_picture ? String(c.entity_picture || a.entity_picture || '') : '';
     this.shadowRoot.innerHTML = `<style>
       :host{display:block;color:var(--primary-text-color);font-family:var(--paper-font-body1_-_font-family,inherit)}
        ha-card{border:1px solid var(--divider-color);border-radius:var(--climate-flow-border-radius,18px);background:var(--ha-card-background,var(--card-background-color));padding:8px 10px;box-sizing:border-box;min-height:64px;display:block;overflow:hidden;cursor:pointer}ha-card:focus-visible{outline:2px solid var(--primary-color);outline-offset:2px}
@@ -1031,6 +1188,7 @@ export class ClimateFlowCard extends HTMLElementBase {
       .icon{width:40px;height:40px;flex:0 0 40px;border-radius:50%;display:grid;place-items:center;background:var(--secondary-background-color);color:var(--secondary-text-color);border:1px solid var(--divider-color)}
       .icon[data-active="true"]{background:var(--climate-flow-accent-color,var(--primary-color));color:var(--text-primary-color,#fff);border-color:transparent}
       .icon ha-icon{--mdc-icon-size:22px}
+      .icon img{width:100%;height:100%;object-fit:cover;border-radius:50%}.icon ha-icon[hidden]{display:none}
       .meta{flex:1 1 0;min-width:0;display:flex;flex-direction:column;gap:2px;overflow:hidden}
       .title{font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
        .status{font-size:12px;color:var(--secondary-text-color);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -1060,11 +1218,12 @@ export class ClimateFlowCard extends HTMLElementBase {
      </style><ha-card tabindex="0" role="group" aria-label="Tap card background to toggle heating"><div class="pill"><span class="icon"><ha-icon></ha-icon></span><div class="meta"><span class="title"></span><span class="status"></span></div><span class="current"><ha-icon></ha-icon><span></span></span><div class="controls"></div><button class="schedule" aria-label="Open schedule details" title="Open schedule details"><ha-icon icon="mdi:calendar-clock"></ha-icon></button></div></ha-card>`;
     const root = this.shadowRoot;
     this._bindCardToggle(root.querySelector('ha-card'));
-    root.querySelector('ha-card').setAttribute('aria-label', t.toggleHeating);
+    root.querySelector('ha-card').setAttribute('aria-label', this._actionLabel(t));
     const icon = root.querySelector('.icon');
     icon.dataset.active = active ? 'true' : 'false';
     root.querySelector('.icon ha-icon').setAttribute('icon', String(c.icon || a.icon || 'mdi:thermostat'));
     root.querySelector('.icon ha-icon').setAttribute('aria-hidden', 'true');
+    this._paintIcon(icon, root.querySelector('.icon ha-icon'), picture);
     root.querySelector('.title').textContent = String(title);
     const statusEl = root.querySelector('.status');
     if (unavailable) {
@@ -1085,11 +1244,18 @@ export class ClimateFlowCard extends HTMLElementBase {
     currentIcon.setAttribute('aria-hidden', 'true');
     currentEl.dataset.active = String(active && !unavailable);
     const currentText = currentEl.querySelector('span');
-    if (c.show_current_temperature_chip && !unavailable && currentValue !== null) {
-      const currentDisplay = currentTemperatureDisplay(currentValue, unit, locale);
-      currentText.textContent = currentDisplay;
+    const targetDisplay = formatNumber(target, locale);
+    const lowDisplay = formatNumber(model.low, locale);
+    const highDisplay = formatNumber(model.high, locale);
+    const targetLabel = model.dual ? `${lowDisplay}–${highDisplay} ${unit}` : `${targetDisplay} ${unit}`;
+    const targetAccessible = model.dual ? t.targetRange(lowDisplay, highDisplay, unit) : t.target(targetDisplay, unit);
+    const currentDisplay = currentTemperatureDisplay(currentValue, unit, locale);
+    const plan = heroTemperaturePlan({ dual: model.dual, hasTarget, hasCurrent: currentValue !== null, main: mainTemperatureKind(c.main_temperature) });
+    const chipDisplay = plan.chip === 'target' ? (hasTarget ? targetLabel : '') : currentDisplay;
+    if (c.show_current_temperature_chip && !unavailable && chipDisplay) {
+      currentText.textContent = chipDisplay;
       currentEl.setAttribute('role', 'img');
-      currentEl.setAttribute('aria-label', t.currentTemperature(currentDisplay));
+      currentEl.setAttribute('aria-label', plan.chip === 'target' ? targetAccessible : t.currentTemperature(chipDisplay));
     } else currentEl.hidden = true;
     const controls = root.querySelector('.controls');
     const schedule = root.querySelector('.schedule');
@@ -1106,13 +1272,13 @@ export class ClimateFlowCard extends HTMLElementBase {
       if (c.show_step_controls && adjustable) { const minus = document.createElement('button'); minus.dataset.delta = String(-step); minus.setAttribute('aria-label', t.decrease); minus.textContent = '−'; controls.append(minus); }
       const setpoint = document.createElement('button');
       setpoint.className = 'setpoint';
-      if (hasTarget) {
-        const targetDisplay = formatNumber(target, locale);
-        const lowDisplay = formatNumber(model.low, locale);
-        const highDisplay = formatNumber(model.high, locale);
-        const label = model.dual ? `${lowDisplay}–${highDisplay} ${unit}` : `${targetDisplay} ${unit}`;
-        const accessible = model.dual ? t.targetRange(lowDisplay, highDisplay, unit) : t.target(targetDisplay, unit);
-        setpoint.textContent = label;
+      if (plan.hero === 'target' && hasTarget) {
+        setpoint.textContent = targetLabel;
+        setpoint.title = targetAccessible;
+        setpoint.setAttribute('aria-label', t.openDetails(targetAccessible));
+      } else if (plan.hero === 'current' && currentDisplay) {
+        const accessible = t.currentTemperature(currentDisplay);
+        setpoint.textContent = currentDisplay;
         setpoint.title = accessible;
         setpoint.setAttribute('aria-label', t.openDetails(accessible));
       } else {
@@ -1151,8 +1317,11 @@ export class ClimateFlowCard extends HTMLElementBase {
     const modeList = modes(e).filter((m) => valid(m));
     const hasTarget = !unavailable && model.available;
     const step = effectiveStep(e, c.step, this._stepOverride);
-    const t = cardStrings(this._hass?.locale?.language);
+    const t = this._strings();
     const scheduleActive = isScheduleEnabled(this._scheduleProgram());
+    // main_temperature picks the hero number; the other value moves to the chip.
+    const plan = heroTemperaturePlan({ dual: model.dual, hasTarget, hasCurrent: currentValue !== null, main: mainTemperatureKind(c.main_temperature) });
+    const picture = c.show_entity_picture ? String(c.entity_picture || a.entity_picture || '') : '';
     this.shadowRoot.innerHTML = `<style>
       :host{display:block;color:var(--primary-text-color);font-family:var(--paper-font-body1_-_font-family,inherit)}
       ha-card{--cf-accent:var(--climate-flow-accent-color,var(--primary-color));position:relative;overflow:hidden;border:1px solid var(--divider-color);border-radius:var(--climate-flow-border-radius,20px);background:var(--ha-card-background,var(--card-background-color));padding:14px 16px;box-sizing:border-box;min-height:106px;display:grid;grid-template-rows:auto auto;gap:12px;box-shadow:0 16px 34px -26px rgba(0,0,0,.95);cursor:pointer}
@@ -1164,7 +1333,7 @@ export class ClimateFlowCard extends HTMLElementBase {
       .body{overflow-x:auto;overflow-y:hidden;gap:8px;padding-bottom:2px;scrollbar-width:thin}
       .icon{width:36px;height:36px;flex:0 0 36px;border-radius:50%;display:grid;place-items:center;background:color-mix(in srgb,var(--cf-accent) 16%,transparent);color:var(--cf-accent);border:1px solid color-mix(in srgb,var(--cf-accent) 32%,transparent)}
       .icon[data-active="true"]{background:var(--cf-accent);color:var(--text-primary-color,#fff);border-color:transparent;box-shadow:0 0 0 4px color-mix(in srgb,var(--cf-accent) 20%,transparent)}
-      .icon ha-icon{--mdc-icon-size:20px}.title{font-size:15px;font-weight:600;letter-spacing:-.01em;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}.chips{display:flex;gap:6px;flex:0 1 auto;min-width:0;overflow:hidden}.chip{font-size:11px;font-weight:600;padding:5px 9px;border-radius:999px;background:var(--secondary-background-color);color:var(--secondary-text-color);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:110px;flex:0 1 auto;border:1px solid transparent}
+      .icon ha-icon{--mdc-icon-size:20px}.icon img{width:100%;height:100%;object-fit:cover;border-radius:50%}.icon ha-icon[hidden]{display:none}.title{font-size:15px;font-weight:600;letter-spacing:-.01em;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}.chips{display:flex;gap:6px;flex:0 1 auto;min-width:0;overflow:hidden}.chip{font-size:11px;font-weight:600;padding:5px 9px;border-radius:999px;background:var(--secondary-background-color);color:var(--secondary-text-color);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:110px;flex:0 1 auto;border:1px solid transparent}
       .chip.state{background:color-mix(in srgb,var(--cf-accent) 15%,transparent);color:var(--cf-accent);border-color:color-mix(in srgb,var(--cf-accent) 30%,transparent)}
       .target{font-size:34px;line-height:1.05;color:var(--primary-text-color);font-weight:700;letter-spacing:-.03em;flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums;display:flex;align-items:baseline;gap:3px}.target strong{font:inherit}.target .unit{font-size:14px;font-weight:600;letter-spacing:0;color:var(--secondary-text-color)}
       input[type=range]{-webkit-appearance:none;appearance:none;width:auto;flex:1 1 70px;min-width:60px;height:24px;background:transparent;margin:0;cursor:pointer}
@@ -1181,14 +1350,15 @@ export class ClimateFlowCard extends HTMLElementBase {
        <div class="body"></div></ha-card>`;
     const root = this.shadowRoot;
     this._bindCardToggle(root.querySelector('ha-card'));
-    root.querySelector('ha-card').setAttribute('aria-label', t.toggleHeating);
+    root.querySelector('ha-card').setAttribute('aria-label', this._actionLabel(t));
     root.querySelector('.icon ha-icon').setAttribute('icon', String(c.icon || a.icon || 'mdi:thermostat'));
     root.querySelector('.icon').dataset.active = String(active);
+    this._paintIcon(root.querySelector('.icon'), root.querySelector('.icon ha-icon'), picture);
     root.querySelector('.title').textContent = String(title);
     const chips = root.querySelector('.chips');
     const addChip = (show, text, modifier = '') => { if (show && text) { const span = document.createElement('span'); span.className = modifier ? `chip ${modifier}` : 'chip'; span.textContent = String(text); chips.append(span); } };
     addChip(c.show_state_chip && !unavailable, modeLabel(e?.state, t), 'state');
-    addChip(c.show_current_temperature_chip && !unavailable, currentValue !== null ? `${currentValue}${unit}` : '');
+    addChip(c.show_current_temperature_chip && !unavailable, plan.chip === 'target' ? (hasTarget ? (model.dual ? `${model.low}–${model.high}${unit}` : `${target}${unit}`) : '') : (currentValue !== null ? `${currentValue}${unit}` : ''));
     addChip(c.show_humidity_chip && !unavailable, numeric(a.current_humidity) !== null ? `${numeric(a.current_humidity)}%` : '');
     if (c.show_unavailable_badge && unavailable) { const b=document.createElement('span'); b.className='badge'; b.textContent=t.unavailable; chips.append(b); }
     const schedule = root.querySelector('.schedule');
@@ -1199,19 +1369,24 @@ export class ClimateFlowCard extends HTMLElementBase {
     const body = root.querySelector('.body');
     if (unavailable) { const message=document.createElement('span'); message.className='empty'; message.textContent=t.entityUnavailable; body.append(message); }
     else {
-      const targetText=document.createElement('span'); targetText.className='target'; targetText.textContent=hasTarget ? '' : t.targetUnavailable;
-      if (hasTarget) {
-        targetText.title = model.dual ? t.targetRange(model.low, model.high, unit) : t.target(target, unit);
+      const showHero = (plan.hero === 'target' && hasTarget) || (plan.hero === 'current' && currentValue !== null);
+      const targetText=document.createElement('span'); targetText.className='target'; targetText.textContent=showHero ? '' : t.targetUnavailable;
+      if (showHero) {
+        const heroIsTarget = plan.hero === 'target';
+        targetText.title = heroIsTarget ? (model.dual ? t.targetRange(model.low, model.high, unit) : t.target(target, unit)) : t.currentTemperature(`${currentValue}${unit}`);
         const value=document.createElement('strong');
         // The number is the hero of this layout, so the unit is its own span
         // and can sit smaller and secondary next to it.
         const unitText=document.createElement('span'); unitText.className='unit'; unitText.textContent=unit;
-        if (model.dual) {
+        if (heroIsTarget && model.dual) {
           value.textContent=`${model.low}–${model.high}`;
           targetText.setAttribute('aria-label', t.targetRange(model.low, model.high, unit));
-        } else {
+        } else if (heroIsTarget) {
           value.textContent=`${target}`;
           targetText.setAttribute('aria-label', t.target(target, unit));
+        } else {
+          value.textContent=`${currentValue}`;
+          targetText.setAttribute('aria-label', t.currentTemperature(`${currentValue}${unit}`));
         }
         targetText.append(value, unitText);
       }
@@ -1304,7 +1479,7 @@ export class ClimateFlowCard extends HTMLElementBase {
     </style>`;
   }
   _renderScheduleDialog() {
-    const t = cardStrings(this._hass?.locale?.language);
+    const t = this._strings();
     const old = this.shadowRoot.querySelector('dialog'); old?.remove();
     const dialog = document.createElement('dialog'); dialog.setAttribute('aria-label', t.scheduleAria);
     dialog.innerHTML = `${this._scheduleDialogStyle()}<div class="dlg-head"><span class="dlg-icon"><ha-icon icon="mdi:calendar-clock"></ha-icon></span><div class="dlg-titles"><h2>${t.weeklySchedule}</h2><div class="dlg-sub"></div></div><button class="close" aria-label="${t.closeSchedule}" title="${t.close}"><ha-icon icon="mdi:close"></ha-icon></button></div><div class="dlg-body"></div>`;
@@ -1415,8 +1590,31 @@ export class ClimateFlowCard extends HTMLElementBase {
     if (confirmed || actual.state==='unknown' || actual.state==='unavailable') { clearTimeout(this._optimisticTimer); this._optimisticTimer=null; this._optimistic=null; }
   }
   _bindCardToggle(card) {
-    card.addEventListener('click', ev=>{ const path=ev.composedPath?.() || [ev.target]; if(path.some(node=>node!==card && node?.matches?.('button,input,select,textarea,a,[role="slider"],[role="button"],[role="group"]'))) return; const e=this._hass?.states?.[this.config.entity], mode=hvacToggleMode(e); if(mode) this._service('climate','set_hvac_mode',{entity_id:this.config.entity,hvac_mode:mode}); });
+    // Only a press on the card background reaches the configured action: every
+    // interactive control is excluded from the composed path.
+    const eligible = (ev) => { const path=ev.composedPath?.() || [ev.target]; return !path.some(node=>node!==card && node?.matches?.('button,input,select,textarea,a,[role="slider"],[role="button"],[role="group"]')); };
+    const doubleTap = this.config.double_tap_action;
+    card.addEventListener('click', ev=>{
+      if (!eligible(ev)) return;
+      if (this._holdFired) { this._holdFired = false; return; }
+      if (doubleTap === 'none') { this._runCardAction(this.config.tap_action); return; }
+      // A double tap is only knowable once its window closes, so the single
+      // tap waits for it instead of firing first.
+      const now = Date.now();
+      if (now - (this._lastTapAt || 0) <= 300) { clearTimeout(this._tapTimer); this._tapTimer=null; this._lastTapAt=0; this._runCardAction(doubleTap); return; }
+      this._lastTapAt = now;
+      clearTimeout(this._tapTimer);
+      this._tapTimer = setTimeout(() => { this._tapTimer=null; this._lastTapAt=0; this._runCardAction(this.config.tap_action); }, 300);
+    });
     card.addEventListener('keydown', ev=>{ if((ev.key==='Enter'||ev.key===' ') && ev.target===card){ev.preventDefault();card.click();} });
+    const hold = this.config.hold_action;
+    if (hold !== 'none') {
+      const cancelHold = () => { clearTimeout(this._holdTimer); this._holdTimer=null; };
+      card.addEventListener('pointerdown', (ev)=>{ if (!eligible(ev)) return; cancelHold(); this._holdTimer=setTimeout(()=>{ this._holdTimer=null; this._holdFired=true; this._runCardAction(hold); },550); });
+      card.addEventListener('pointerup', cancelHold);
+      card.addEventListener('pointerleave', cancelHold);
+      card.addEventListener('pointercancel', cancelHold);
+    }
   }
   _focusedDelta() {
     // Which +/- control owns focus right now. The optimistic re-render replaces
@@ -1456,7 +1654,7 @@ export class ClimateFlowCard extends HTMLElementBase {
     this._restoreDeltaFocus(delta);
   }
   _requestManualOverride(target, step = null) {
-    const t = cardStrings(this._hass?.locale?.language);
+    const t = this._strings();
     const deltaFocus = this._focusedDelta();
     const sliderFocus = this.shadowRoot.activeElement?.classList?.contains('slider');
     const dialog = document.createElement('dialog');
@@ -1488,7 +1686,7 @@ export class ClimateFlowCard extends HTMLElementBase {
     const payload = temperaturePayload(base, value, this.config.step, this._stepOverride);
     const program = this._scheduleProgram();
     if (program?.enabled && this._hass?.services?.climate_flow_scheduler?.set_manual_override) {
-      if (payload?.temperature === undefined) { this._showServiceError(cardStrings(this._hass?.locale?.language).dualOverrideUnsupported); return; }
+      if (payload?.temperature === undefined) { this._showServiceError(this._strings().dualOverrideUnsupported); return; }
       return this._requestManualOverride(payload.temperature, this._stepOverride);
     }
     if (payload) { clearTimeout(this._optimisticTimer); this._optimistic={entityId:this.config.entity,payload}; this._renderPreservingDeltaFocus(); this._optimisticTimer=setTimeout(()=>{this._optimistic=null;this._optimisticTimer=null;this._renderPreservingDeltaFocus();},8000); const seq=this._optimistic; Promise.resolve().then(()=>this._hass?.callService('climate','set_temperature',{entity_id:this.config.entity,...payload})).catch(()=>{if(this._optimistic===seq){clearTimeout(this._optimisticTimer);this._optimistic=null;this._renderPreservingDeltaFocus();}}); }

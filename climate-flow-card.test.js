@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { ClimateFlowCard, ClimateFlowCardEditor, CLIMATE_FLOW_CARD_TAG, CLIMATE_FLOW_CARD_EDITOR_TAG, registerClimateFlowElements, isClimateFlowElementsRegistered, isHomeAssistantFrontendReady, scheduleClimateFlowReregistration, clampTarget, temperaturePayload, targetModel, hvacToggleMode, scheduleDraft, validateScheduleDraft, defaultCardConfig, configSchema, configSchemaFields, getEntitySuggestion, sameCardConfig, errorLabel, effectiveStep, normalizeLayout, isClimateActive, isScheduleEnabled, awayTemperaturePayload, schedulableModes, manualOverrideServicePayload, overrideDurationChoices, formatOverrideExpiry, overrideFocusSelector,
-  pauseServicePayload, pauseDurationChoices, activePause, PAUSE_DURATIONS, climateStatusKey, statusLabel, modeLabel, resolveLanguage, cardStrings, fieldLabel, pickEntityTimestamp, formatRelativeTime, formatNumber, pillStatusParts, currentTemperatureDisplay, CARD_SURFACES, normalizeAccentColor, normalizeSurface, sliderFillPercent, paintSliderFill } from './custom_components/climate_flow_scheduler/www/climate-flow-card.js';
+  pauseServicePayload, pauseDurationChoices, activePause, PAUSE_DURATIONS, climateStatusKey, statusLabel, modeLabel, resolveLanguage, cardStrings, fieldLabel, pickEntityTimestamp, formatRelativeTime, formatNumber, pillStatusParts, currentTemperatureDisplay, CARD_SURFACES, normalizeAccentColor, normalizeSurface, sliderFillPercent, paintSliderFill, CARD_ACTIONS, normalizeCardAction, MODE_ACCENTS, modeAccentColor, cardLanguage, mainTemperatureKind, CARD_OPTION_DEFAULTS, cardDefault, stripCardDefaults, heroTemperaturePlan } from './custom_components/climate_flow_scheduler/www/climate-flow-card.js';
 
 test('module imports without browser DOM and exports the card class', () => {
   assert.equal(typeof ClimateFlowCard, 'function');
@@ -139,7 +139,7 @@ test('editor renders localized sections with help text and an inert live preview
   assert.match(editor, /document\.createElement\('climate-flow-card'\)/);
   assert.match(editor, /this\._preview\.hass = value;/);
   // A null or empty step is stripped before it can reach the card.
-  assert.match(editor, /delete merged\.step/);
+  assert.match(editor, /delete raw\.step/);
 });
 
 test('entity suggestion targets climate entities only and wraps the card config', () => {
@@ -251,6 +251,83 @@ test('accent colour and surface options normalise, validate and reach the chrome
   assert.equal(plainTarget.dataset.surface, 'default');
 });
 
+test('card background actions normalise and keep the historic toggle behaviour', () => {
+  assert.deepEqual(CARD_ACTIONS, ['toggle', 'more-info', 'none']);
+  assert.equal(normalizeCardAction('more-info', 'toggle'), 'more-info');
+  assert.equal(normalizeCardAction('none', 'toggle'), 'none');
+  assert.equal(normalizeCardAction('turbo', 'toggle'), 'toggle');
+  assert.equal(normalizeCardAction(undefined, 'none'), 'none');
+  for (const [key, fallback] of [['tap_action', 'toggle'], ['hold_action', 'none'], ['double_tap_action', 'none']]) {
+    assert.equal(configuredCard(defaultCardConfig('climate.living_room')).config[key], fallback, key);
+    assert.equal(configuredCard({ ...defaultCardConfig('climate.living_room'), [key]: 'more-info' }).config[key], 'more-info', key);
+  }
+  assert.throws(() => configuredCard({ ...defaultCardConfig('climate.living_room'), tap_action: 'turbo' }), /tap_action must be one of/);
+});
+
+test('per-mode accents, card language and main temperature helpers', () => {
+  assert.equal(MODE_ACCENTS.heat, '#f59f42');
+  assert.equal(MODE_ACCENTS.cool, '#71c0ff');
+  assert.equal(modeAccentColor('cool'), '#71c0ff');
+  assert.equal(modeAccentColor('off'), null);
+  assert.equal(modeAccentColor(undefined), null);
+  assert.equal(cardLanguage({ language: 'it' }, 'en'), 'it');
+  assert.equal(cardLanguage({ language: 'auto' }, 'it'), 'it');
+  assert.equal(cardLanguage({}, 'it'), 'it');
+  assert.equal(mainTemperatureKind('current'), 'current');
+  assert.equal(mainTemperatureKind('target'), 'target');
+  assert.equal(mainTemperatureKind('bogus'), 'target');
+  // Both are validated like the other cosmetic options.
+  assert.throws(() => configuredCard({ ...defaultCardConfig('climate.living_room'), main_temperature: 'both' }), /main_temperature/);
+  assert.throws(() => configuredCard({ ...defaultCardConfig('climate.living_room'), language: 'fr' }), /language must be/);
+  const card = configuredCard({ ...defaultCardConfig('climate.living_room'), language: 'it', main_temperature: 'current' });
+  assert.equal(card.config.main_temperature, 'current');
+  assert.equal(cardLanguage(card.config, 'en'), 'it');
+});
+
+test('hero slot prefers the configured temperature and falls back, chip takes the other', () => {
+  assert.deepEqual(heroTemperaturePlan({ hasTarget: true, hasCurrent: true, main: 'target' }), { hero: 'target', chip: 'current' });
+  assert.deepEqual(heroTemperaturePlan({ hasTarget: true, hasCurrent: true, main: 'current' }), { hero: 'current', chip: 'target' });
+  // An empty hero takes the other temperature instead of leaving a blank slot.
+  assert.deepEqual(heroTemperaturePlan({ hasTarget: true, hasCurrent: false, main: 'current' }), { hero: 'target', chip: null });
+  assert.deepEqual(heroTemperaturePlan({ hasTarget: false, hasCurrent: true, main: 'target' }), { hero: 'current', chip: null });
+  assert.deepEqual(heroTemperaturePlan({ hasTarget: false, hasCurrent: false, main: 'target' }), { hero: null, chip: null });
+  // Anything but "current" means target.
+  assert.deepEqual(heroTemperaturePlan({ hasTarget: true, hasCurrent: true, main: 'bogus' }), { hero: 'target', chip: 'current' });
+});
+
+test('defaults are resolved per option and stripped from the emitted YAML', () => {
+  for (const [name, fallback] of Object.entries(CARD_OPTION_DEFAULTS)) assert.equal(cardDefault(name, 'climate.living_room'), fallback, name);
+  assert.equal(cardDefault('show_humidity_chip', 'climate.living_room'), false);
+  assert.equal(cardDefault('accent_color', 'climate.living_room'), undefined);
+  // A config at its defaults collapses to the only key that cannot be dropped.
+  assert.deepEqual(stripCardDefaults({ ...defaultCardConfig('climate.living_room') }), { entity: 'climate.living_room' });
+  assert.deepEqual(stripCardDefaults({ entity: 'climate.living_room', surface: 'blend', step: 1 }), { entity: 'climate.living_room', surface: 'blend', step: 1 });
+  assert.deepEqual(stripCardDefaults({ entity: 'climate.living_room', name: '', accent_color: null, unknown_option: '' }), { entity: 'climate.living_room' });
+  assert.deepEqual(stripCardDefaults({ entity: 'climate.living_room', type: 'custom:climate-flow-card' }), { entity: 'climate.living_room', type: 'custom:climate-flow-card' });
+});
+
+test('actions, mode accents, language and main temperature are wired in both layouts', () => {
+  const source = readFileSync(new URL('./custom_components/climate_flow_scheduler/www/climate-flow-card.js', import.meta.url), 'utf8');
+  // Background gestures: tap, double tap (after its window) and long press.
+  assert.match(source, /this\._runCardAction\(this\.config\.tap_action\)/);
+  assert.match(source, /this\._runCardAction\(doubleTap\)/);
+  assert.match(source, /this\._runCardAction\(hold\)/);
+  assert.match(source, /pointerdown', \(ev\)=>\{ if \(!eligible\(ev\)\) return;/);
+  assert.match(source, /normalizeCardAction\(this\.config\.tap_action, 'toggle'\)/);
+  assert.match(source, /this\._holdFired\s*=\s*true/);
+  // The aria-label tells what the background does instead of assuming toggle.
+  assert.equal((source.match(/_actionLabel\(t\)/g) || []).length, 2, 'both layouts label the card by its tap action');
+  // The mode accent only fills in when no explicit accent is configured.
+  assert.match(source, /normalizeAccentColor\(this\.config\?\.accent_color\) \|\| modeAccentColor\(/);
+  // main_temperature drives the hero slot of each layout, with the shared
+  // fallback rule (an empty hero takes the other temperature).
+  assert.ok((source.match(/heroTemperaturePlan\(\{/g) || []).length >= 2, 'both layouts plan hero and chip');
+  assert.match(source, /const showHero = \(plan\.hero === 'target' && hasTarget\)/);
+  // The entity picture swaps the glyph in both layouts.
+  assert.ok((source.match(/this\._paintIcon\(/g) || []).length >= 2, 'both layouts paint the entity picture');
+  assert.match(source, /_paintIcon\(box, glyph, picture\)/);
+});
+
 test('compact slider fill maps the value onto the entity range', () => {
   assert.equal(sliderFillPercent({ min: '7', max: '30', value: '7' }), 0);
   assert.equal(sliderFillPercent({ min: '7', max: '30', value: '30' }), 100);
@@ -299,8 +376,8 @@ test('editor exposes a colour picker with a theme reset and default-first segmen
   assert.match(source, /input\.type = 'color'/);
   assert.match(source, /this\._themeAccent\(\)/);
   assert.match(source, /group\._options = options/);
-  assert.match(source, /const current = this\._config\[item\.name\] \?\? options\[0\]/);
-  assert.match(source, /const options = control\._options \|\| \[\]/);
+  assert.match(source, /const current = this\._value\(item\.name, options\)/);
+  assert.match(source, /this\._value\(name, control\._options \|\| \[\]\)/);
   assert.match(source, /reset\.disabled = !current/);
 });
 

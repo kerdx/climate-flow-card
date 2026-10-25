@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.4.0
+
+- Configurable card background actions: `tap_action`, `hold_action` and `double_tap_action` (`toggle`, `more-info`, `none`). The default keeps the historic tap-to-toggle, a double tap is detected within 300 ms, a long press after 550 ms and a press released early does nothing; the card's accessible label now states what a tap does.
+- Per-mode accents: with no explicit `accent_color`, the icon, chips, slider and calendar button take the active mode's colour (heat, cool, dry, auto, fan) and fall back to the theme when the climate is off.
+- New `main_temperature` option (`target` by default, `current` to swap) chooses which value takes the prominent slot of each layout; the other value moves to the secondary chip, and an empty hero falls back to the available temperature instead of leaving a blank slot.
+- Entity picture support: `show_entity_picture` replaces the circular icon with the entity picture (or the `entity_picture` URL), in both layouts.
+- The editor now emits only the values that differ from their defaults, so a saved config stays small and readable, and a config written by an older version is cleaned up on the first edit.
+- New `language` option (`auto`, `en`, `it`) fixes the card's own language independently of the Home Assistant interface language; the card editor always follows the interface language.
+
 ## v1.3.0
 
 - Redesigned the `compact` layout for a premium look: the setpoint is now a hero number with its own unit, the state chip is tinted with the accent, the icon glows while the entity runs, the slider track is a gradient that follows the value, controls are bordered pills, and a thin accent line runs along the top of the card. Surface, border and shadow are tuned to read well on dark themes.
