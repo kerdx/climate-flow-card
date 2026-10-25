@@ -74,13 +74,14 @@ test('card layouts are mobile-first and scale from their own container width', (
 });
 
 test('editor schema groups the options into localized sections', () => {
-  assert.deepEqual(configSchema.map((entry) => entry.type), ['grid', 'grid', 'expandable']);
-  assert.deepEqual(configSchema.map((entry) => entry.name), ['identity', 'chips', 'controls']);
+  assert.deepEqual(configSchema.map((entry) => entry.type), ['grid', 'grid', 'expandable', 'expandable']);
+  assert.deepEqual(configSchema.map((entry) => entry.name), ['identity', 'chips', 'controls', 'auxiliary']);
   assert.equal(configSchema[2].collapsed, true);
+  assert.equal(configSchema[3].collapsed, true);
   for (const lang of ['en', 'it']) {
     const strings = cardStrings(lang);
-    assert.deepEqual(Object.keys(strings.sections), ['identity', 'chips', 'controls']);
-    assert.ok(strings.sections.identity && strings.sections.chips && strings.sections.controls);
+    assert.deepEqual(Object.keys(strings.sections), ['identity', 'chips', 'controls', 'auxiliary']);
+    assert.ok(strings.sections.identity && strings.sections.chips && strings.sections.controls && strings.sections.auxiliary);
   }
   // Every help entry maps to a real schema field, in both languages.
   const names = configSchemaFields().map((entry) => entry.name).sort();
@@ -94,12 +95,16 @@ test('editor schema exposes climate entity and all supported visual options', ()
   const fields = configSchemaFields();
   assert.deepEqual(fields[0].selector.entity, { filter: { domain: ['climate'] } });
   const names = fields.map((entry) => entry.name);
-  for (const name of ['entity', 'name', 'icon', 'layout', 'accent_color', 'surface', 'step', 'show_state_chip', 'show_current_temperature_chip', 'show_humidity_chip', 'show_unavailable_badge', 'show_mode_buttons', 'show_step_controls', 'show_schedule_button']) assert.ok(names.includes(name));
+  for (const name of ['entity', 'name', 'icon', 'layout', 'accent_color', 'surface', 'step', 'show_state_chip', 'show_current_temperature_chip', 'show_humidity_chip', 'show_unavailable_badge', 'show_mode_buttons', 'show_step_controls', 'show_schedule_button', 'calibration_entity', 'deadzone_entity', 'sensor_source_entity', 'child_lock_entity']) assert.ok(names.includes(name));
   // The native preset dropdown next to the setpoint is gone for good.
   assert.equal(names.includes('show_preset_modes'), false);
   assert.deepEqual(fields.find((entry) => entry.name === 'layout').selector, { select: { mode: 'dropdown', options: ['pill', 'compact', 'circular'] } });
   assert.deepEqual(fields.find((entry) => entry.name === 'surface').selector, { select: { mode: 'dropdown', options: CARD_SURFACES } });
   assert.deepEqual(fields.find((entry) => entry.name === 'accent_color').selector, { color: {} });
+  assert.deepEqual(fields.find((entry) => entry.name === 'calibration_entity').selector.entity.filter.domain, ['number']);
+  assert.deepEqual(fields.find((entry) => entry.name === 'deadzone_entity').selector.entity.filter.domain, ['number']);
+  assert.deepEqual(fields.find((entry) => entry.name === 'sensor_source_entity').selector.entity.filter.domain, ['select']);
+  assert.deepEqual(fields.find((entry) => entry.name === 'child_lock_entity').selector.entity.filter.domain, ['switch']);
   assert.deepEqual(defaultCardConfig('climate.living_room'), {
     entity: 'climate.living_room', layout: 'pill',
     show_state_chip: true, show_current_temperature_chip: true, show_humidity_chip: false,
@@ -1062,8 +1067,23 @@ test('outside-schedule temperature validation and payload', () => {
 test('pill schedule pill is a sibling of temperature controls in markup', () => {
   const source = readFileSync(new URL('./custom_components/climate_flow_scheduler/www/climate-flow-card.js', import.meta.url), 'utf8');
   const pillSection = source.slice(source.indexOf('  _renderPill() {'), source.indexOf('  _renderCompact() {'));
-  assert.match(pillSection, /<div class="controls"><\/div><button class="schedule"/);
+  assert.match(pillSection, /<div class="controls"><\/div><div class="actions"><button class="schedule"/);
+  assert.match(pillSection, /this\._addAuxiliaryButton\(actions\)/);
   assert.doesNotMatch(pillSection, /controls\.append\(schedule\)/);
+});
+
+test('auxiliary entities are optional and restricted to their Home Assistant domains', () => {
+  const card = new ClimateFlowCard();
+  card.attachShadow = () => { card.shadowRoot = {}; };
+  card._renderPreservingDeltaFocus = () => {};
+  card._renderSignature = () => null;
+  card._scheduleRelativeRefresh = () => {};
+  assert.doesNotThrow(() => card.setConfig({ entity: 'climate.room', calibration_entity: 'number.room_calibration', sensor_source_entity: 'select.room_sensor', child_lock_entity: 'switch.room_lock' }));
+  assert.equal(card.config.calibration_entity, 'number.room_calibration');
+  assert.doesNotThrow(() => card.setConfig({ entity: 'climate.room' }));
+  assert.equal(card.config.calibration_entity, undefined);
+  assert.throws(() => card.setConfig({ entity: 'climate.room', deadzone_entity: 'sensor.room_deadzone' }), /deadzone_entity must refer to a number entity/);
+  assert.throws(() => card.setConfig({ entity: 'climate.room', sensor_source_entity: 'number.room_sensor' }), /sensor_source_entity must refer to a select entity/);
 });
 
 test('climate active state distinguishes running modes from off and unavailable', () => {

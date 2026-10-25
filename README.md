@@ -47,6 +47,7 @@ The card is loaded by the integration itself, so it only exists once the integra
 - In `heat_cool` mode, the circular dial has separate low/high handles. Drag the nearer handle to adjust that bound while preserving at least one temperature step between them.
 - `main_temperature` chooses whether the current or target temperature is prominent. On the circular layout, choosing `current` makes the dial display-only; activating it opens the climate entity details.
 - The card editor exposes the same settings as YAML. Background tap, hold, and double-tap actions can independently toggle the climate, open more-info, or do nothing; the default tap remains the historic toggle action.
+- Optional calibration, deadzone, sensor-source, and child-lock entities open in a separate **Device settings** panel. The card sends changes directly to those number, select, and switch entities; it does not duplicate the weekly schedule.
 
 ## Card configuration
 
@@ -69,6 +70,12 @@ layout: pill # pill | compact | circular
 # haptics_style: medium # light | medium | heavy
 # animations: true # value and button animations; false makes the card static
 # animation_duration: 220 # milliseconds for the value animation
+# Optional auxiliary controls; the Device settings button appears when at least
+# one entity is configured. These can also be selected in the card editor.
+# calibration_entity: number.living_room_local_temperature_calibration
+# deadzone_entity: number.living_room_deadzone_temperature
+# sensor_source_entity: select.living_room_sensor
+# child_lock_entity: switch.living_room_child_lock
 # The target number is draggable (drag to adjust, arrow keys work too) and
 # slider/drag/arrow commits are batched into a single service call.
 # With layout: circular the dial itself is the control: dragging it moves the

@@ -84,13 +84,14 @@ const program = (slots, extra = {}) => ({
   ...extra,
 });
 
-const build = ({ entity = climateEntity(), config = {}, programState } = {}) => {
+const build = ({ entity = climateEntity(), config = {}, programState, extraStates = {} } = {}) => {
   const calls = [];
   const card = new ClimateFlowCard();
   card.setConfig({ entity: 'climate.living_room', layout: 'circular', ...config });
   card._hass = {
     states: {
       'climate.living_room': entity,
+      ...extraStates,
       ...(programState
         ? {
             'climate_flow_scheduler.programs': {
@@ -106,6 +107,9 @@ const build = ({ entity = climateEntity(), config = {}, programState } = {}) => 
     services: {
       climate: { set_temperature: {}, set_hvac_mode: {} },
       climate_flow_scheduler: { save_program: {}, resume_program: {}, set_manual_override: {}, set_pause: {} },
+      number: { set_value: {} },
+      select: { select_option: {} },
+      switch: { turn_on: {}, turn_off: {} },
     },
     callService: async (domain, service, data) => { calls.push([domain, service, data]); },
   };
@@ -424,6 +428,106 @@ test('circular dial animates the hero only when the value changes', () => {
   card._render();
   assert.ok(shadow.querySelector('.hero').className.includes('bump'), 'a new value re-animates');
   card.disconnectedCallback?.();
+});
+
+test('auxiliary settings launcher is absent by default and available in every layout when configured', () => {
+  const defaults = build();
+  assert.equal(defaults.shadow.querySelector('.auxiliary'), null, 'the card stays uncluttered when no auxiliary entity is set');
+  defaults.card.disconnectedCallback?.();
+  for (const layout of ['pill', 'compact', 'circular']) {
+    const { card, shadow } = build({ config: { layout, child_lock_entity: 'switch.living_room_child_lock' } });
+    const button = shadow.querySelector('.auxiliary');
+    assert.ok(button, `${layout} exposes the optional panel launcher`);
+    assert.equal(button.getAttribute('aria-label'), 'Open device settings');
+    card.disconnectedCallback?.();
+  }
+});
+
+test('auxiliary settings dialog displays live values and calls each entity domain service', async () => {
+  const { card, calls, shadow } = build({
+    config: {
+      calibration_entity: 'number.living_room_calibration',
+      deadzone_entity: 'number.living_room_deadzone',
+      sensor_source_entity: 'select.living_room_sensor',
+      child_lock_entity: 'switch.living_room_child_lock',
+    },
+    extraStates: {
+      'number.living_room_calibration': { entity_id: 'number.living_room_calibration', state: '-3', attributes: { friendly_name: 'Calibration', min: -10, max: 10, step: 1 } },
+      'number.living_room_deadzone': { entity_id: 'number.living_room_deadzone', state: 'unknown', attributes: { friendly_name: 'Deadzone', min: 0, max: 5, step: 1 } },
+      'select.living_room_sensor': { entity_id: 'select.living_room_sensor', state: 'AL', attributes: { friendly_name: 'Sensor source', options: ['IN', 'AL', 'OU'] } },
+      'switch.living_room_child_lock': { entity_id: 'switch.living_room_child_lock', state: 'off', attributes: { friendly_name: 'Child lock' } },
+    },
+  });
+  shadow.querySelector('.auxiliary').click();
+  const dialog = shadow.querySelector('.aux-dialog');
+  assert.ok(dialog?.open, 'the separate settings dialog opens');
+  assert.equal(dialog.getAttribute('aria-label'), 'Auxiliary climate controls');
+  const calibration = dialog.querySelector('input[aria-label="Temperature calibration"]');
+  const deadzone = dialog.querySelector('input[aria-label="Temperature deadzone"]');
+  const sensor = dialog.querySelector('select[aria-label="Sensor source"]');
+  const childLock = dialog.querySelector('input[aria-label="Child lock"]');
+  assert.equal(calibration.value, '-3');
+  assert.equal(deadzone.value, '', 'unknown number state remains editable without inventing a value');
+  assert.equal(sensor.value, 'AL');
+  assert.deepEqual([...sensor.options].map((option) => option.value), ['IN', 'AL', 'OU']);
+  assert.equal(childLock.checked, false);
+  assert.equal(calibration.min, '-10');
+  assert.equal(calibration.max, '10');
+  assert.equal(calibration.step, '1');
+
+  card.hass = {
+    ...card._hass,
+    states: {
+      ...card._hass.states,
+      'number.living_room_calibration': { ...card._hass.states['number.living_room_calibration'], state: '-4' },
+    },
+  };
+  assert.equal(calibration.value, '-4', 'an external HA update refreshes modal values without rebuilding the card');
+
+  calibration.value = '-2';
+  toggleEvent(calibration, 'change');
+  deadzone.value = '2';
+  toggleEvent(deadzone, 'change');
+  sensor.value = 'OU';
+  toggleEvent(sensor, 'change');
+  childLock.checked = true;
+  toggleEvent(childLock, 'change');
+  await wait(0);
+
+  assert.deepEqual(calls, [
+    ['number', 'set_value', { entity_id: 'number.living_room_calibration', value: -2 }],
+    ['number', 'set_value', { entity_id: 'number.living_room_deadzone', value: 2 }],
+    ['select', 'select_option', { entity_id: 'select.living_room_sensor', option: 'OU' }],
+    ['switch', 'turn_on', { entity_id: 'switch.living_room_child_lock' }],
+  ]);
+  dialog.querySelector('.aux-close').click();
+  assert.equal(shadow.querySelector('.aux-dialog'), null, 'close returns to the card');
+  card.disconnectedCallback?.();
+});
+
+test('editor entity fields accept the configured auxiliary domains and can be cleared', () => {
+  const editor = document.createElement('climate-flow-card-editor');
+  editor.setConfig({ entity: 'climate.living_room' });
+  const fields = [
+    ['Temperature calibration', 'calibration_entity', 'number.room_calibration', 'sensor.invalid'],
+    ['Temperature deadzone', 'deadzone_entity', 'number.room_deadzone', 'climate.invalid'],
+    ['Sensor source', 'sensor_source_entity', 'select.room_sensor', 'number.invalid'],
+    ['Child lock', 'child_lock_entity', 'switch.room_lock', 'select.invalid'],
+  ];
+  for (const [label, key, validEntity, invalidEntity] of fields) {
+    const input = editor.shadowRoot.querySelector(`input[aria-label="${label}"]`);
+    assert.ok(input, `${key} has an editor entity input`);
+    assert.equal(input.placeholder, `${validEntity.split('.')[0]}.entity`, `${key} hints the expected domain`);
+    input.value = invalidEntity;
+    toggleEvent(input, 'input');
+    assert.equal(editor._config[key], undefined, `${key} rejects a wrong domain`);
+    input.value = validEntity;
+    toggleEvent(input, 'input');
+    assert.equal(editor._config[key], validEntity, `${key} accepts its entity domain`);
+    input.value = '';
+    toggleEvent(input, 'input');
+    assert.equal(editor._config[key], undefined, `${key} can be cleared again`);
+  }
 });
 
 // --------------------------------------------------------------------------

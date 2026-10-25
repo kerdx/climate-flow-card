@@ -1,5 +1,10 @@
 # Changelog
 
+## v1.9.0
+
+- Add an optional Device settings panel for configured temperature-calibration and deadzone numbers, sensor-source select, and child-lock switch entities. Values stay synchronized with Home Assistant, edits call the corresponding entity services, and the weekly schedule remains separate.
+- Extend the card editor's entity picker and validation to support the auxiliary `number`, `select`, and `switch` domains; document the new YAML options.
+
 ## v1.8.0
 
 - Refactor the pill, compact, and circular layouts around mobile-first styles and card-local container queries, improving readability and control access in narrow dashboard columns.

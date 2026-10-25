@@ -46,6 +46,12 @@ const STRINGS = {
     badMode: 'Unsupported HVAC mode.',
     weeklySchedule: 'Weekly schedule',
     scheduleAria: 'Weekly climate schedule',
+    auxiliaryControls: 'Device settings',
+    auxiliaryAria: 'Auxiliary climate controls',
+    openAuxiliary: 'Open device settings',
+    closeAuxiliary: 'Close device settings',
+    auxiliaryHint: 'Changes are applied immediately to the selected auxiliary entities.',
+    auxiliaryUnavailable: 'This entity is unavailable.',
     close: 'Close',
     closeSchedule: 'Close schedule editor',
     backendMissing: 'Climate Flow Scheduler is not installed. Install and configure it to edit a program (integration domain: climate_flow_scheduler).',
@@ -88,6 +94,8 @@ const STRINGS = {
       show_state_chip: 'Show state and relative time', show_current_temperature_chip: 'Show current temperature',
       show_humidity_chip: 'Show humidity', show_unavailable_badge: 'Show unavailable badge',
        show_mode_buttons: 'Show HVAC mode selector', show_step_controls: 'Show +/- controls', show_schedule_button: 'Show schedule button',
+      calibration_entity: 'Temperature calibration', deadzone_entity: 'Temperature deadzone',
+      sensor_source_entity: 'Sensor source', child_lock_entity: 'Child lock',
       accent_color: 'Accent colour', surface: 'Card surface',
       language: 'Language', entity_picture: 'Entity picture',
       show_entity_picture: 'Show entity picture', main_temperature: 'Main temperature',
@@ -142,6 +150,7 @@ const STRINGS = {
       identity: 'Identity and appearance',
       chips: 'Visible elements',
       controls: 'Controls and steps',
+      auxiliary: 'Auxiliary controls',
     },
     themeColor: 'Theme',
     help: {
@@ -170,6 +179,10 @@ const STRINGS = {
       haptics_style: 'Vibration pattern: light, medium or heavy.',
       animations: 'Play the value and button animations; switch it off for a completely static card.',
       animation_duration: 'Duration of the value animation in milliseconds (0 falls back to the default).',
+      calibration_entity: 'Optional number entity for temperature calibration; it appears in a separate device-settings panel.',
+      deadzone_entity: 'Optional number entity for the thermostat deadzone.',
+      sensor_source_entity: 'Optional select entity used to choose the thermostat sensor source.',
+      child_lock_entity: 'Optional switch entity for the thermostat child lock.',
     },
   },
   it: {
@@ -212,6 +225,12 @@ const STRINGS = {
     badMode: 'Modalità HVAC non supportata.',
     weeklySchedule: 'Pianificazione settimanale',
     scheduleAria: 'Pianificazione climate settimanale',
+    auxiliaryControls: 'Impostazioni dispositivo',
+    auxiliaryAria: 'Controlli ausiliari climate',
+    openAuxiliary: 'Apri impostazioni dispositivo',
+    closeAuxiliary: 'Chiudi impostazioni dispositivo',
+    auxiliaryHint: 'Le modifiche vengono applicate subito alle entità ausiliarie selezionate.',
+    auxiliaryUnavailable: 'Questa entità non è disponibile.',
     close: 'Chiudi',
     closeSchedule: 'Chiudi editor pianificazione',
     backendMissing: 'Climate Flow Scheduler non è installato. Installa e configura l’integrazione per modificare un programma (dominio: climate_flow_scheduler).',
@@ -254,6 +273,8 @@ const STRINGS = {
       show_state_chip: 'Mostra stato e tempo relativo', show_current_temperature_chip: 'Mostra temperatura attuale',
       show_humidity_chip: 'Mostra umidità', show_unavailable_badge: 'Mostra badge non disponibile',
        show_mode_buttons: 'Mostra selettore modalità HVAC', show_step_controls: 'Mostra controlli +/−', show_schedule_button: 'Mostra pulsante pianificazione',
+      calibration_entity: 'Calibrazione temperatura', deadzone_entity: 'Deadzone temperatura',
+      sensor_source_entity: 'Sorgente del sensore', child_lock_entity: 'Blocco bambini',
       accent_color: 'Colore accento', surface: 'Sfondo card',
       language: 'Lingua', entity_picture: 'Foto entità',
       show_entity_picture: 'Mostra foto entità', main_temperature: 'Temperatura principale',
@@ -305,6 +326,7 @@ const STRINGS = {
       identity: 'Identità e aspetto',
       chips: 'Elementi visibili',
       controls: 'Controlli e passi',
+      auxiliary: 'Controlli ausiliari',
     },
     themeColor: 'Tema',
     help: {
@@ -333,6 +355,10 @@ const STRINGS = {
       haptics_style: 'Schema di vibrazione: light, medium o heavy.',
       animations: 'Riproduce le animazioni di valore e pulsanti; disattivalo per una card completamente statica.',
       animation_duration: 'Durata dell’animazione del valore in millisecondi (0 usa il default).',
+      calibration_entity: 'Entità number opzionale per la calibrazione temperatura; viene mostrata in un pannello separato.',
+      deadzone_entity: 'Entità number opzionale per la deadzone del termostato.',
+      sensor_source_entity: 'Entità select opzionale per scegliere la sorgente del sensore del termostato.',
+      child_lock_entity: 'Entità switch opzionale per il blocco bambini del termostato.',
     },
   },
 };
@@ -840,6 +866,16 @@ export const CARD_OPTION_DEFAULTS = {
   tap_action: 'toggle', hold_action: 'none', double_tap_action: 'none',
   haptics: true, haptics_style: 'medium', animations: true, animation_duration: ANIMATION_DURATION_DEFAULT,
 };
+const AUXILIARY_ENTITY_DOMAINS = {
+  calibration_entity: ['number'],
+  deadzone_entity: ['number'],
+  sensor_source_entity: ['select'],
+  child_lock_entity: ['switch'],
+};
+const entityMatchesDomains = (entityId, domains) => typeof entityId === 'string'
+  && domains.some((domain) => entityId.startsWith(`${domain}.`) && entityId.length > domain.length + 1);
+const hasConfiguredAuxiliaryEntities = (config) => Object.keys(AUXILIARY_ENTITY_DOMAINS)
+  .some((key) => typeof config?.[key] === 'string' && config[key].trim());
 export const cardDefault = (name, entity) => {
   const base = defaultCardConfig(entity);
   return Object.hasOwn(base, name) ? base[name] : CARD_OPTION_DEFAULTS[name];
@@ -891,6 +927,12 @@ export const configSchema = [
     field('haptics_style', { select: { mode: 'dropdown', options: HAPTIC_STYLES } }),
     field('animations', { boolean: {} }),
     field('animation_duration', { number: { min: 0, max: 2000, step: 10, mode: 'box' } }),
+  ]),
+  expandable('auxiliary', [
+    field('calibration_entity', { entity: { filter: { domain: AUXILIARY_ENTITY_DOMAINS.calibration_entity } } }),
+    field('deadzone_entity', { entity: { filter: { domain: AUXILIARY_ENTITY_DOMAINS.deadzone_entity } } }),
+    field('sensor_source_entity', { entity: { filter: { domain: AUXILIARY_ENTITY_DOMAINS.sensor_source_entity } } }),
+    field('child_lock_entity', { entity: { filter: { domain: AUXILIARY_ENTITY_DOMAINS.child_lock_entity } } }),
   ]),
 ];
 export const configSchemaFields = () => {
@@ -961,6 +1003,7 @@ export class ClimateFlowCardEditor extends HTMLElementBase {
     // form on every hass tick (or config echo) dropped keyboard focus, so
     // typing a name required one click per letter.
     if (this._entityPicker) this._entityPicker.hass = value;
+    for (const picker of this._entityPickers?.values?.() || []) if (picker !== this._entityPicker) picker.hass = value;
     if (this._preview) this._preview.hass = value;
   }
   setConfig(config) {
@@ -1073,24 +1116,37 @@ export class ClimateFlowCardEditor extends HTMLElementBase {
   }
   _buildEntity(item, strings) {
     const row = this._row(strings, item.name);
+    const domains = item.selector?.entity?.filter?.domain || ['climate'];
     let control;
     if (globalThis.customElements?.get?.('ha-entity-picker')) {
       control = document.createElement('ha-entity-picker');
       control.hass = this._hass;
       control.value = this._value(item.name) || '';
-      control.includeDomains = ['climate'];
+      control.includeDomains = domains;
       control.setAttribute('aria-label', fieldLabel(strings, item.name));
-      control.addEventListener('value-changed', (event) => { event.stopPropagation(); const value = event.detail?.value; if (typeof value === 'string' && /^climate\./.test(value)) this._setField(item.name, value); });
-      this._entityPicker = control;
+      control.addEventListener('value-changed', (event) => {
+        event.stopPropagation();
+        const value = event.detail?.value;
+        if (entityMatchesDomains(value, domains)) this._setField(item.name, value);
+        else if (!value && Object.hasOwn(AUXILIARY_ENTITY_DOMAINS, item.name)) this._setField(item.name, undefined);
+      });
+      this._entityPickers = this._entityPickers || new Map();
+      this._entityPickers.set(item.name, control);
+      if (domains.includes('climate')) this._entityPicker = control;
     } else {
       control = document.createElement('input');
       control.type = 'text';
       control.className = 'ed-input';
-      control.placeholder = 'climate.living_room';
+      control.placeholder = `${domains[0]}.entity`;
       control.value = this._value(item.name) || '';
       control.setAttribute('aria-label', fieldLabel(strings, item.name));
-      // Free text is accepted while typing but only a climate id is stored.
-      control.addEventListener('input', () => { if (/^climate\./.test(control.value.trim())) this._setField(item.name, control.value.trim()); });
+      // Free text is accepted while typing but only an id in the allowed
+      // domain is stored.
+      control.addEventListener('input', () => {
+        const value = control.value.trim();
+        if (entityMatchesDomains(value, domains)) this._setField(item.name, value);
+        else if (!value && Object.hasOwn(AUXILIARY_ENTITY_DOMAINS, item.name)) this._setField(item.name, undefined);
+      });
     }
     row.append(control);
     row._fieldControl = control;
@@ -1280,6 +1336,13 @@ export class ClimateFlowCard extends HTMLElementBase {
     }
     if (config.main_temperature !== undefined && config.main_temperature !== null && config.main_temperature !== '' && !['target', 'current'].includes(config.main_temperature)) throw new Error('main_temperature must be "target" or "current".');
     if (config.language !== undefined && config.language !== null && config.language !== '' && !['auto', 'en', 'it'].includes(config.language)) throw new Error('language must be "auto", "en" or "it".');
+    const auxiliaryEntityConfig = {};
+    for (const [key, domains] of Object.entries(AUXILIARY_ENTITY_DOMAINS)) {
+      const entityId = config[key];
+      if (entityId === undefined || entityId === null || (typeof entityId === 'string' && !entityId.trim())) continue;
+      if (!entityMatchesDomains(entityId, domains)) throw new Error(`${key} must refer to a ${domains.join(' or ')} entity.`);
+      auxiliaryEntityConfig[key] = entityId.trim();
+    }
     // An empty step (null, '' or whitespace) means "follow the entity": the
     // editor emits null when the box is cleared, and throwing there would make
     // every toggle in the card editor look broken.
@@ -1287,7 +1350,7 @@ export class ClimateFlowCard extends HTMLElementBase {
     if (!stepAbsent && (numeric(config.step) === null || numeric(config.step) <= 0)) throw new Error('step must be a number greater than zero.');
     this._stepOverride = stepAbsent ? null : numeric(config.step);
     this.config = { layout: 'pill', show_state_chip: true, show_current_temperature_chip: true, show_humidity_chip: false,
-      show_unavailable_badge: true, show_mode_buttons: true, show_step_controls: true, show_schedule_button: true, step: 0.5, ...config, layout };
+      show_unavailable_badge: true, show_mode_buttons: true, show_step_controls: true, show_schedule_button: true, step: 0.5, ...config, ...auxiliaryEntityConfig, layout };
     if (stepAbsent) this.config.step = 0.5;
     // Chrome is stored normalised (lower-case hex, known surface) so the render
     // never re-validates, and an emptied editor field is dropped instead of
@@ -1332,6 +1395,7 @@ export class ClimateFlowCard extends HTMLElementBase {
   set hass(hass) {
     this._hass = hass;
     this._reconcileOptimistic();
+    this._syncAuxiliaryDialog();
     // HA hands a tick to every card on the dashboard for any state change;
     // rebuilding the whole tree for an update that changes nothing steals
     // focus and wastes work. The signature covers everything the DOM can
@@ -1376,6 +1440,8 @@ export class ClimateFlowCard extends HTMLElementBase {
   }
   _showServiceError(error) {
     const t = this._strings();
+    const dialogError = this.shadowRoot?.querySelector('.aux-dialog[open] .aux-error');
+    if (dialogError) { dialogError.textContent = t.serviceError(errorLabel(t, error)); return; }
     let alert = this.shadowRoot?.querySelector('.card-service-error');
     if (!alert && this.shadowRoot) {
       alert = document.createElement('div'); alert.className = 'card-service-error'; alert.setAttribute('role', 'alert'); alert.setAttribute('aria-live', 'assertive');
@@ -1459,7 +1525,7 @@ export class ClimateFlowCard extends HTMLElementBase {
   }
   _render() {
     if (!this.shadowRoot || !this.config) return;
-    if ((this._scheduleOpen || this._overrideDialogOpen) && this.shadowRoot.querySelector('dialog[open]')) return;
+    if ((this._scheduleOpen || this._overrideDialogOpen || this._auxiliaryOpen) && this.shadowRoot.querySelector('dialog[open]')) return;
     if ((this.config.layout ?? 'pill') === 'circular') this._renderCircular();
     else if ((this.config.layout ?? 'pill') === 'compact') this._renderCompact();
     else this._renderPill();
@@ -1558,11 +1624,11 @@ export class ClimateFlowCard extends HTMLElementBase {
        .bump{animation:cf-bump var(--cf-motion,220ms) cubic-bezier(.2,.7,.3,1)}
        [data-motion="off"] *{animation:none!important;transition:none!important}
         [data-motion="on"] button:not([role="slider"]):active{transform:scale(.95)}
-       .schedule{grid-area:schedule;display:grid;place-items:center;flex:0 0 auto;padding:6px 8px;font:inherit;color:var(--primary-text-color);background:var(--secondary-background-color);border:0;border-radius:999px;cursor:pointer}
-       .schedule[data-active="true"]{background:var(--climate-flow-accent-color,var(--primary-color));color:var(--text-primary-color,#fff)}
-       .schedule:focus-visible{outline:2px solid var(--primary-color);outline-offset:2px}.schedule ha-icon{--mdc-icon-size:18px;display:block}
-           @container climate-flow-card (max-width:320px){ha-card{padding:6px}.pill{gap:5px}.identity{gap:5px}.icon{width:30px;height:30px;flex-basis:30px}.icon ha-icon{--mdc-icon-size:17px}.current{gap:3px;padding:5px 6px}.current ha-icon{--mdc-icon-size:12px}.controls button{padding:5px}.controls .setpoint{min-width:42px;padding-inline:1px}.schedule{padding:5px 6px}}
-           @container climate-flow-card (min-width:481px){ha-card{padding:8px 10px}.pill{display:flex;gap:10px}.identity{flex:1 1 0;gap:10px}.icon{width:40px;height:40px;flex-basis:40px}.icon ha-icon{--mdc-icon-size:22px}.title{font-size:15px}.status{font-size:12px}.current{max-width:none;gap:5px;font-size:12px;padding:8px 11px}.current ha-icon{--mdc-icon-size:15px}.controls{width:auto;justify-self:auto;max-width:42%}.controls button{font-size:14px;padding:7px 10px}.controls .setpoint{min-width:58px;font-size:15px;padding:7px 2px}.controls select{font-size:13px;min-width:54px;max-width:96px;padding:7px 5px}.schedule{padding:8px 11px}}
+        .actions{grid-area:schedule;display:flex;align-items:center;gap:5px;flex:0 0 auto}.schedule,.auxiliary{display:grid;place-items:center;flex:0 0 auto;padding:6px 8px;font:inherit;color:var(--primary-text-color);background:var(--secondary-background-color);border:0;border-radius:999px;cursor:pointer}
+        .schedule[data-active="true"]{background:var(--climate-flow-accent-color,var(--primary-color));color:var(--text-primary-color,#fff)}
+        .schedule:focus-visible,.auxiliary:focus-visible{outline:2px solid var(--primary-color);outline-offset:2px}.schedule ha-icon,.auxiliary ha-icon{--mdc-icon-size:18px;display:block}
+            @container climate-flow-card (max-width:320px){ha-card{padding:6px}.pill{gap:5px}.identity{gap:5px}.icon{width:30px;height:30px;flex-basis:30px}.icon ha-icon{--mdc-icon-size:17px}.current{gap:3px;padding:5px 6px}.current ha-icon{--mdc-icon-size:12px}.controls button{padding:5px}.controls .setpoint{min-width:42px;padding-inline:1px}.schedule,.auxiliary{padding:5px 6px}}
+            @container climate-flow-card (min-width:481px){ha-card{padding:8px 10px}.pill{display:flex;gap:10px}.identity{flex:1 1 0;gap:10px}.icon{width:40px;height:40px;flex-basis:40px}.icon ha-icon{--mdc-icon-size:22px}.title{font-size:15px}.status{font-size:12px}.current{max-width:none;gap:5px;font-size:12px;padding:8px 11px}.current ha-icon{--mdc-icon-size:15px}.controls{width:auto;justify-self:auto;max-width:42%}.controls button{font-size:14px;padding:7px 10px}.controls .setpoint{min-width:58px;font-size:15px;padding:7px 2px}.controls select{font-size:13px;min-width:54px;max-width:96px;padding:7px 5px}.schedule,.auxiliary{padding:8px 11px}}
         ${BUTTON_FEEDBACK_CSS}
         .controls button[data-delta]{transition:background-color .12s ease,transform .12s ease}
          @media (hover:hover) and (pointer:fine){.controls button[data-delta]:not(:disabled):hover{background:var(--divider-color);color:var(--primary-text-color);box-shadow:none}}
@@ -1573,7 +1639,7 @@ export class ClimateFlowCard extends HTMLElementBase {
           ha-card[data-surface="blend"].card-press-feedback{background-color:color-mix(in srgb,var(--cf-accent) 9%,transparent)}
          @media(prefers-reduced-motion:reduce){ha-card{transition:none!important}}
          ha-card[data-motion="off"]{transition:none!important}
-        </style><ha-card tabindex="0" role="group" aria-label="Tap card background to toggle heating"><div class="pill"><div class="identity"><span class="icon"><ha-icon></ha-icon></span><div class="meta"><span class="title"></span><span class="status"></span></div></div><span class="current"><ha-icon></ha-icon><span></span></span><div class="controls"></div><button class="schedule" aria-label="Open schedule details" title="Open schedule details"><ha-icon icon="mdi:calendar-clock"></ha-icon></button></div></ha-card>`;
+         </style><ha-card tabindex="0" role="group" aria-label="Tap card background to toggle heating"><div class="pill"><div class="identity"><span class="icon"><ha-icon></ha-icon></span><div class="meta"><span class="title"></span><span class="status"></span></div></div><span class="current"><ha-icon></ha-icon><span></span></span><div class="controls"></div><div class="actions"><button class="schedule" aria-label="Open schedule details" title="Open schedule details"><ha-icon icon="mdi:calendar-clock"></ha-icon></button></div></div></ha-card>`;
     const root = this.shadowRoot;
     const pillCard = root.querySelector('ha-card');
     this._bindCardToggle(pillCard);
@@ -1626,6 +1692,8 @@ export class ClimateFlowCard extends HTMLElementBase {
     schedule.title = t.openSchedule;
     schedule.hidden = !c.show_schedule_button || unavailable;
     schedule.addEventListener('click', () => this._openSchedule());
+    const actions = root.querySelector('.actions');
+    this._addAuxiliaryButton(actions);
     controls.setAttribute('role', 'group');
     controls.setAttribute('aria-label', t.temperatureControls);
     controls.tabIndex = 0;
@@ -1719,17 +1787,17 @@ export class ClimateFlowCard extends HTMLElementBase {
       input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;background:var(--text-primary-color,#fff);border:2px solid var(--cf-accent)}
        .body button{padding:6px 8px;flex:0 0 auto;border-radius:999px;background:var(--secondary-background-color);border:1px solid var(--divider-color);font:inherit;font-size:13px;font-weight:600;white-space:nowrap}.body button[data-delta]{display:grid;place-items:center;width:34px;height:34px;padding:0;border-radius:12px;border:1px solid color-mix(in srgb,var(--cf-accent) 28%,var(--divider-color));background:linear-gradient(180deg,color-mix(in srgb,var(--cf-accent) 12%,var(--secondary-background-color)),var(--secondary-background-color));color:var(--cf-accent);font-size:18px;font-weight:700;line-height:1;box-shadow:inset 0 1px 0 color-mix(in srgb,var(--text-primary-color,#fff) 12%,transparent),0 2px 6px rgba(0,0,0,.14);transition:background-color .16s,border-color .16s,box-shadow .16s}.body button[data-delta]:hover{background:color-mix(in srgb,var(--cf-accent) 20%,var(--secondary-background-color));border-color:color-mix(in srgb,var(--cf-accent) 55%,var(--divider-color));box-shadow:0 4px 10px color-mix(in srgb,var(--cf-accent) 20%,transparent)}
        .body select{flex:0 0 auto;width:auto;min-width:68px;max-width:112px;overflow:hidden;text-overflow:ellipsis;font:inherit;font-size:12px;font-weight:600;color:var(--cf-accent);background:color-mix(in srgb,var(--cf-accent) 12%,transparent);border:1px solid color-mix(in srgb,var(--cf-accent) 30%,transparent);border-radius:12px;padding:7px 8px;cursor:pointer}
-       button{font:inherit;color:var(--primary-text-color);background:var(--secondary-background-color);border:0;border-radius:999px;padding:6px 9px;cursor:pointer}.head .schedule{display:grid;place-items:center;flex:0 0 auto;padding:6px 8px}.head .schedule[data-active="true"]{background:var(--climate-flow-accent-color,var(--primary-color));color:var(--text-primary-color,#fff)}button:focus-visible,input:focus-visible{outline:2px solid var(--cf-accent);outline-offset:2px}.selected{background:var(--cf-accent);color:var(--text-primary-color,#fff)}
+        button{font:inherit;color:var(--primary-text-color);background:var(--secondary-background-color);border:0;border-radius:999px;padding:6px 9px;cursor:pointer}.head .actions{display:flex;align-items:center;gap:5px;flex:0 0 auto}.head .schedule,.head .auxiliary{display:grid;place-items:center;flex:0 0 auto;padding:6px 8px}.head .schedule[data-active="true"]{background:var(--climate-flow-accent-color,var(--primary-color));color:var(--text-primary-color,#fff)}.head .schedule ha-icon,.head .auxiliary ha-icon{--mdc-icon-size:18px;display:block}button:focus-visible,input:focus-visible{outline:2px solid var(--cf-accent);outline-offset:2px}.selected{background:var(--cf-accent);color:var(--text-primary-color,#fff)}
       select:focus-visible{outline:2px solid var(--cf-accent);outline-offset:2px}.badge{color:var(--error-color);font-size:11px;white-space:nowrap;flex:0 0 auto}.empty{color:var(--secondary-text-color);overflow:hidden;text-overflow:ellipsis}
-        @container climate-flow-card (max-width:320px){ha-card{padding:10px 9px}.head,.body{gap:5px}.icon{width:32px;height:32px;flex-basis:32px}.icon ha-icon{--mdc-icon-size:18px}.chips{gap:4px}.chip{max-width:64px;padding:4px 6px}.target{font-size:25px}.body button[data-delta]{width:32px;height:32px}.body select{min-width:62px;max-width:98px}}
-        @container climate-flow-card (min-width:421px){ha-card{padding:14px 16px;gap:12px}.head,.body{gap:10px}.body{gap:8px}.icon{width:36px;height:36px;flex-basis:36px}.icon ha-icon{--mdc-icon-size:20px}.chips{gap:6px}.chip{max-width:110px;padding:5px 9px}.target{font-size:34px}.target .unit{font-size:14px}.body button{padding:7px 11px}.body button[data-delta]{width:38px;height:38px;font-size:19px;border-radius:13px}.body select{min-width:78px;max-width:130px;padding:8px 10px;font-size:13px}.head .schedule{padding:8px 10px}}
+         @container climate-flow-card (max-width:320px){ha-card{padding:10px 9px}.head,.body{gap:5px}.icon{width:32px;height:32px;flex-basis:32px}.icon ha-icon{--mdc-icon-size:18px}.chips{gap:4px}.chip{max-width:64px;padding:4px 6px}.target{font-size:25px}.body button[data-delta]{width:32px;height:32px}.body select{min-width:62px;max-width:98px}}
+         @container climate-flow-card (min-width:421px){ha-card{padding:14px 16px;gap:12px}.head,.body{gap:10px}.body{gap:8px}.icon{width:36px;height:36px;flex-basis:36px}.icon ha-icon{--mdc-icon-size:20px}.chips{gap:6px}.chip{max-width:110px;padding:5px 9px}.target{font-size:34px}.target .unit{font-size:14px}.body button{padding:7px 11px}.body button[data-delta]{width:38px;height:38px;font-size:19px;border-radius:13px}.body select{min-width:78px;max-width:130px;padding:8px 10px;font-size:13px}.head .schedule,.head .auxiliary{padding:8px 10px}}
         ${BUTTON_FEEDBACK_CSS}
        @media (hover:hover) and (pointer:fine){ha-card:not([data-surface="blend"]):hover{background-color:color-mix(in srgb,var(--cf-accent) 5%,var(--cf-card-surface))}ha-card[data-surface="blend"]:hover{background-color:color-mix(in srgb,var(--cf-accent) 5%,transparent)}}
        ha-card:not([data-surface="blend"]).card-press-feedback{background-color:color-mix(in srgb,var(--cf-accent) 9%,var(--cf-card-surface))}
        ha-card[data-surface="blend"].card-press-feedback{background-color:color-mix(in srgb,var(--cf-accent) 9%,transparent)}
        @media(prefers-reduced-motion:reduce){ha-card{transition:none!important}}
        ha-card[data-motion="off"]{transition:none!important}
-     </style><ha-card tabindex="0" role="group" aria-label="Tap card background to toggle heating"><div class="head"><span class="icon"><ha-icon></ha-icon></span><span class="title"></span><span class="chips"></span><button class="schedule" aria-label="Open schedule details" title="Open schedule details"><ha-icon icon="mdi:calendar-clock"></ha-icon></button></div>
+      </style><ha-card tabindex="0" role="group" aria-label="Tap card background to toggle heating"><div class="head"><span class="icon"><ha-icon></ha-icon></span><span class="title"></span><span class="chips"></span><div class="actions"><button class="schedule" aria-label="Open schedule details" title="Open schedule details"><ha-icon icon="mdi:calendar-clock"></ha-icon></button></div></div>
        <div class="body"></div></ha-card>`;
     const root = this.shadowRoot;
     const compactCard = root.querySelector('ha-card');
@@ -1751,6 +1819,7 @@ export class ClimateFlowCard extends HTMLElementBase {
     schedule.title = t.openSchedule;
     schedule.dataset.active = scheduleActive ? 'true' : 'false';
     schedule.hidden = !c.show_schedule_button;
+    this._addAuxiliaryButton(root.querySelector('.actions'));
     const body = root.querySelector('.body');
     if (unavailable) { const message=document.createElement('span'); message.className='empty'; message.textContent=t.entityUnavailable; body.append(message); }
     else {
@@ -1869,8 +1938,8 @@ export class ClimateFlowCard extends HTMLElementBase {
       .title{font-size:15px;font-weight:600;letter-spacing:-.01em;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
       .chips{display:flex;gap:6px;flex:0 1 auto;min-width:0;overflow:hidden}.chip{font-size:11px;font-weight:600;padding:5px 9px;border-radius:999px;background:var(--secondary-background-color);color:var(--secondary-text-color);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:110px;flex:0 1 auto;border:1px solid transparent}
        .chip.state{background:color-mix(in srgb,var(--cf-accent) 15%,transparent);color:var(--cf-accent);border-color:color-mix(in srgb,var(--cf-accent) 30%,transparent)}
-       .schedule{display:grid;place-items:center;flex:0 0 auto;padding:6px 8px;border:0;border-radius:999px;background:var(--secondary-background-color);color:var(--primary-text-color);cursor:pointer}
-      .schedule[data-active="true"]{background:var(--climate-flow-accent-color,var(--primary-color));color:var(--text-primary-color,#fff)}.schedule ha-icon{--mdc-icon-size:18px;display:block}.schedule:focus-visible{outline:2px solid var(--cf-accent);outline-offset:2px}
+        .actions{display:flex;align-items:center;gap:5px;flex:0 0 auto}.schedule,.auxiliary{display:grid;place-items:center;flex:0 0 auto;padding:6px 8px;border:0;border-radius:999px;background:var(--secondary-background-color);color:var(--primary-text-color);cursor:pointer}
+       .schedule[data-active="true"]{background:var(--climate-flow-accent-color,var(--primary-color));color:var(--text-primary-color,#fff)}.schedule ha-icon,.auxiliary ha-icon{--mdc-icon-size:18px;display:block}.schedule:focus-visible,.auxiliary:focus-visible{outline:2px solid var(--cf-accent);outline-offset:2px}
       .stage{position:relative;display:grid;place-items:center;min-width:0}
        .dial{width:min(100%,196px);height:auto;aspect-ratio:1;display:block;touch-action:none;cursor:grab}.dial:focus-visible{outline:2px solid var(--cf-accent);outline-offset:4px;border-radius:50%}
       .track,.value{fill:none;stroke-width:14;stroke-linecap:round}.track{stroke:var(--divider-color)}
@@ -1889,15 +1958,15 @@ export class ClimateFlowCard extends HTMLElementBase {
       .bump{animation:cf-bump var(--cf-motion,220ms) cubic-bezier(.2,.7,.3,1)}
       [data-motion="off"] *{animation:none!important;transition:none!important}
        [data-motion="on"] button:not([role="slider"]):active{transform:scale(.95)}
-        @container climate-flow-card (max-width:320px){ha-card{padding:10px 9px}.head{gap:5px}.chips{gap:4px}.chip{max-width:64px;padding:4px 6px}.dial{width:min(100%,180px)}.hero{font-size:27px}.row{gap:5px}.row button[data-delta]{width:32px;height:32px}.row select{min-width:62px;max-width:98px}}
-        @container climate-flow-card (min-width:421px){ha-card{padding:14px 16px 16px;gap:10px}.head{gap:10px}.chips{gap:6px}.chip{max-width:110px;padding:5px 9px}.schedule{padding:8px 10px}.dial{width:min(100%,240px)}.hero{font-size:38px}.hero .unit{font-size:15px}.sub{font-size:12px}.row{gap:8px}.row button{padding:7px 11px}.row button[data-delta]{width:38px;height:38px;font-size:19px;border-radius:13px}.row select{min-width:78px;max-width:130px;padding:8px 10px;font-size:13px}}
+         @container climate-flow-card (max-width:320px){ha-card{padding:10px 9px}.head{gap:5px}.chips{gap:4px}.chip{max-width:64px;padding:4px 6px}.dial{width:min(100%,180px)}.hero{font-size:27px}.row{gap:5px}.row button[data-delta]{width:32px;height:32px}.row select{min-width:62px;max-width:98px}}
+         @container climate-flow-card (min-width:421px){ha-card{padding:14px 16px 16px;gap:10px}.head{gap:10px}.chips{gap:6px}.chip{max-width:110px;padding:5px 9px}.schedule,.auxiliary{padding:8px 10px}.dial{width:min(100%,240px)}.hero{font-size:38px}.hero .unit{font-size:15px}.sub{font-size:12px}.row{gap:8px}.row button{padding:7px 11px}.row button[data-delta]{width:38px;height:38px;font-size:19px;border-radius:13px}.row select{min-width:78px;max-width:130px;padding:8px 10px;font-size:13px}}
         ${BUTTON_FEEDBACK_CSS}
        @media (hover:hover) and (pointer:fine){ha-card:not([data-surface="blend"]):hover{background-color:color-mix(in srgb,var(--cf-accent) 5%,var(--cf-card-surface))}ha-card[data-surface="blend"]:hover{background-color:color-mix(in srgb,var(--cf-accent) 5%,transparent)}}
        ha-card:not([data-surface="blend"]).card-press-feedback{background-color:color-mix(in srgb,var(--cf-accent) 9%,var(--cf-card-surface))}
        ha-card[data-surface="blend"].card-press-feedback{background-color:color-mix(in srgb,var(--cf-accent) 9%,transparent)}
        @media(prefers-reduced-motion:reduce){ha-card{transition:none!important}}
        ha-card[data-motion="off"]{transition:none!important}
-      </style><ha-card tabindex="0" role="group" aria-label="Tap card background to toggle heating"><div class="head"><span class="icon"><ha-icon></ha-icon></span><span class="title"></span><span class="chips"></span><button class="schedule" aria-label="Open schedule details" title="Open schedule details"><ha-icon icon="mdi:calendar-clock"></ha-icon></button></div><div class="stage"><svg class="dial" viewBox="0 0 200 200"><circle class="track" cx="100" cy="100" r="80" transform="rotate(135 100 100)"></circle><circle class="value" cx="100" cy="100" r="80" transform="rotate(135 100 100)"></circle><g class="thumbs"></g></svg><div class="center"><span class="hero"><strong></strong><span class="unit"></span></span><span class="sub"></span></div></div><div class="row"></div></ha-card>`;
+       </style><ha-card tabindex="0" role="group" aria-label="Tap card background to toggle heating"><div class="head"><span class="icon"><ha-icon></ha-icon></span><span class="title"></span><span class="chips"></span><div class="actions"><button class="schedule" aria-label="Open schedule details" title="Open schedule details"><ha-icon icon="mdi:calendar-clock"></ha-icon></button></div></div><div class="stage"><svg class="dial" viewBox="0 0 200 200"><circle class="track" cx="100" cy="100" r="80" transform="rotate(135 100 100)"></circle><circle class="value" cx="100" cy="100" r="80" transform="rotate(135 100 100)"></circle><g class="thumbs"></g></svg><div class="center"><span class="hero"><strong></strong><span class="unit"></span></span><span class="sub"></span></div></div><div class="row"></div></ha-card>`;
     const root = this.shadowRoot;
     const circularCard = root.querySelector('ha-card');
     this._bindCardToggle(circularCard);
@@ -1920,6 +1989,7 @@ export class ClimateFlowCard extends HTMLElementBase {
     schedule.dataset.active = scheduleActive ? 'true' : 'false';
     schedule.hidden = !c.show_schedule_button;
     schedule.addEventListener('click', () => this._openSchedule());
+    this._addAuxiliaryButton(root.querySelector('.actions'));
 
     const svg = root.querySelector('.dial');
     const hero = svg;
@@ -1995,6 +2065,166 @@ export class ClimateFlowCard extends HTMLElementBase {
   }
   _scheduleProgram() {
     return this._scheduleSensor()?.attributes?.programs?.[this.config.entity] || null;
+  }
+  _addAuxiliaryButton(container) {
+    if (!container || !hasConfiguredAuxiliaryEntities(this.config)) return;
+    const t = this._strings();
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'auxiliary';
+    button.setAttribute('aria-label', t.openAuxiliary);
+    button.title = t.openAuxiliary;
+    const icon = document.createElement('ha-icon');
+    icon.setAttribute('icon', 'mdi:tune');
+    icon.setAttribute('aria-hidden', 'true');
+    button.append(icon);
+    button.addEventListener('click', () => this._openAuxiliary());
+    container.append(button);
+  }
+  _openAuxiliary() {
+    if (!hasConfiguredAuxiliaryEntities(this.config)) return;
+    this._auxiliaryOpen = true;
+    this._renderAuxiliaryDialog();
+  }
+  _closeAuxiliary(dialog) {
+    this._auxiliaryOpen = false;
+    if (dialog?.open) dialog.close();
+    dialog?.remove();
+    this._render();
+    this.shadowRoot?.querySelector('.auxiliary')?.focus?.();
+  }
+  _syncAuxiliaryDialog() {
+    if (!this._auxiliaryOpen) return;
+    const dialog = this.shadowRoot?.querySelector('.aux-dialog');
+    if (!dialog) return;
+    const active = this.shadowRoot.activeElement || document.activeElement;
+    for (const control of dialog.querySelectorAll('[data-aux-key]')) {
+      const key = control.dataset.auxKey;
+      const entity = this._hass?.states?.[this.config?.[key]];
+      if (control.dataset.auxKind === 'number') {
+        const min = numeric(entity?.attributes?.min);
+        const max = numeric(entity?.attributes?.max);
+        const step = numeric(entity?.attributes?.step);
+        if (min !== null) control.min = String(min); else control.removeAttribute('min');
+        if (max !== null) control.max = String(max); else control.removeAttribute('max');
+        control.step = step !== null && step > 0 ? String(step) : 'any';
+        control.disabled = !entity || entity.state === 'unavailable';
+        if (control !== active) control.value = numeric(entity?.state) === null ? '' : String(numeric(entity.state));
+      } else if (control.dataset.auxKind === 'select') {
+        const values = Array.isArray(entity?.attributes?.options) ? entity.attributes.options.map(String) : [];
+        if (entity?.state && !['unknown', 'unavailable'].includes(entity.state) && !values.includes(String(entity.state))) values.unshift(String(entity.state));
+        if (JSON.stringify(control._auxOptions || []) !== JSON.stringify(values)) {
+          control.replaceChildren();
+          control._auxOptions = values;
+          if (!values.length) {
+            const option = document.createElement('option');
+            option.value = '';
+            option.textContent = this._strings().auxiliaryUnavailable;
+            control.append(option);
+          } else {
+            for (const value of values) {
+              const option = document.createElement('option');
+              option.value = value;
+              option.textContent = value;
+              control.append(option);
+            }
+          }
+        }
+        control.disabled = !entity || entity.state === 'unavailable' || !values.length;
+        if (control !== active) control.value = values.includes(String(entity?.state)) ? String(entity.state) : '';
+      } else if (control.dataset.auxKind === 'switch') {
+        control.disabled = !entity || !['on', 'off'].includes(entity.state);
+        if (control !== active) control.checked = entity?.state === 'on';
+      }
+    }
+  }
+  _renderAuxiliaryDialog() {
+    const t = this._strings();
+    this.shadowRoot.querySelector('.aux-dialog')?.remove();
+    const dialog = document.createElement('dialog');
+    dialog.className = 'aux-dialog';
+    dialog.setAttribute('aria-label', t.auxiliaryAria);
+    dialog.innerHTML = `<style>
+      dialog.aux-dialog{box-sizing:border-box;color:var(--primary-text-color);font:inherit;background:var(--card-background-color,var(--ha-card-background));border:1px solid color-mix(in srgb,var(--divider-color) 82%,transparent);border-radius:22px;width:min(520px,calc(100vw - 28px));max-height:86vh;overflow:auto;padding:0;box-shadow:0 24px 72px rgba(0,0,0,.42)}
+      dialog.aux-dialog::backdrop{background:rgba(0,0,0,.58);backdrop-filter:blur(4px)}
+      .aux-head{display:flex;align-items:center;gap:12px;padding:18px 20px 14px;border-bottom:1px solid var(--divider-color);position:sticky;top:0;background:var(--card-background-color,var(--ha-card-background));z-index:1}
+      .aux-head .dlg-icon{width:40px;height:40px;flex:0 0 40px;display:grid;place-items:center;border-radius:13px;background:color-mix(in srgb,var(--climate-flow-accent-color,var(--primary-color)) 15%,transparent);color:var(--climate-flow-accent-color,var(--primary-color))}
+      .aux-head .dlg-icon ha-icon{--mdc-icon-size:22px;display:block}
+      .aux-head h2{flex:1;min-width:0;margin:0;font-size:18px;font-weight:700}
+      .aux-close{display:grid;place-items:center;width:38px;height:38px;border:1px solid var(--divider-color);border-radius:12px;background:var(--secondary-background-color);color:var(--primary-text-color)}
+      .aux-close ha-icon{--mdc-icon-size:20px}
+      .aux-body{display:flex;flex-direction:column;gap:10px;padding:16px 20px 20px}
+      .aux-hint{margin:0 0 2px;color:var(--secondary-text-color);font-size:12px;line-height:1.45}
+      .aux-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(130px,180px);align-items:center;gap:12px;padding:12px;border:1px solid var(--divider-color);border-radius:14px;background:var(--secondary-background-color)}
+      .aux-labels{display:flex;flex-direction:column;gap:3px;min-width:0}
+      .aux-label{font-size:14px;font-weight:650}
+      .aux-entity{overflow:hidden;color:var(--secondary-text-color);font-size:11px;text-overflow:ellipsis;white-space:nowrap}
+      .aux-row input[type=number],.aux-row select{box-sizing:border-box;width:100%;min-width:0;min-height:40px;padding:8px 10px;border:1px solid var(--divider-color);border-radius:10px;background:var(--card-background-color,var(--ha-card-background));color:var(--primary-text-color);font:inherit;font-variant-numeric:tabular-nums}
+      .aux-row input[type=checkbox]{width:42px;height:24px;justify-self:end;accent-color:var(--climate-flow-accent-color,var(--primary-color))}
+      .aux-row :focus-visible,.aux-close:focus-visible{outline:2px solid var(--climate-flow-accent-color,var(--primary-color));outline-offset:2px}
+      .aux-error{margin:0;color:var(--error-color);font-size:13px;line-height:1.4}
+      .aux-error:empty{display:none}
+      @media(max-width:440px){.aux-head{padding:15px 16px 12px}.aux-body{padding:13px 16px 16px}.aux-row{grid-template-columns:minmax(0,1fr) minmax(105px,140px);gap:8px;padding:10px}}
+      @media(prefers-reduced-motion:reduce){.aux-dialog *{transition:none!important}}
+      ${BUTTON_FEEDBACK_CSS}
+    </style><div class="aux-head"><span class="dlg-icon"><ha-icon icon="mdi:tune" aria-hidden="true"></ha-icon></span><h2>${t.auxiliaryControls}</h2><button class="aux-close" type="button" aria-label="${t.closeAuxiliary}" title="${t.close}"><ha-icon icon="mdi:close"></ha-icon></button></div><div class="aux-body"><p class="aux-hint">${t.auxiliaryHint}</p><p class="aux-error" role="alert" aria-live="assertive"></p></div>`;
+    const body = dialog.querySelector('.aux-body');
+    const definitions = [
+      ['calibration_entity', 'number'],
+      ['deadzone_entity', 'number'],
+      ['sensor_source_entity', 'select'],
+      ['child_lock_entity', 'switch'],
+    ];
+    for (const [key, kind] of definitions) {
+      const entityId = this.config[key];
+      if (!entityId) continue;
+      const entity = this._hass?.states?.[entityId];
+      const row = document.createElement('div');
+      row.className = 'aux-row';
+      const labels = document.createElement('div');
+      labels.className = 'aux-labels';
+      const label = document.createElement('span');
+      label.className = 'aux-label';
+      label.textContent = fieldLabel(t, key);
+      const entityName = document.createElement('span');
+      entityName.className = 'aux-entity';
+      entityName.textContent = String(entity?.attributes?.friendly_name || entityId);
+      labels.append(label, entityName);
+      const control = kind === 'switch' ? document.createElement('input') : document.createElement(kind === 'number' ? 'input' : 'select');
+      control.dataset.auxKey = key;
+      control.dataset.auxKind = kind;
+      control.setAttribute('aria-label', fieldLabel(t, key));
+      if (kind === 'number') {
+        control.type = 'number';
+        control.addEventListener('change', () => {
+          const value = numeric(control.value);
+          const currentEntity = this._hass?.states?.[this.config[key]];
+          const min = numeric(currentEntity?.attributes?.min);
+          const max = numeric(currentEntity?.attributes?.max);
+          if (value === null || (min !== null && value < min) || (max !== null && value > max)) return;
+          this._service('number', 'set_value', { entity_id: entityId, value });
+        });
+      } else if (kind === 'select') {
+        control.addEventListener('change', () => {
+          if (control.value && (control._auxOptions || []).includes(control.value)) this._service('select', 'select_option', { entity_id: entityId, option: control.value });
+        });
+      } else {
+        control.type = 'checkbox';
+        control.setAttribute('role', 'switch');
+        control.addEventListener('change', () => {
+          const currentEntity = this._hass?.states?.[this.config[key]];
+          if (currentEntity && ['on', 'off'].includes(currentEntity.state)) this._service('switch', control.checked ? 'turn_on' : 'turn_off', { entity_id: entityId });
+        });
+      }
+      row.append(labels, control);
+      body.insertBefore(row, dialog.querySelector('.aux-error'));
+    }
+    dialog.querySelector('.aux-close').addEventListener('click', () => this._closeAuxiliary(dialog));
+    dialog.addEventListener('cancel', (event) => { event.preventDefault(); this._closeAuxiliary(dialog); });
+    dialog.addEventListener('click', (event) => { if (event.target === dialog) this._closeAuxiliary(dialog); });
+    this.shadowRoot.append(dialog);
+    this._syncAuxiliaryDialog();
+    dialog.showModal();
   }
   _openSchedule() {
     const program = this._scheduleProgram();
