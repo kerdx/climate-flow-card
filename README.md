@@ -45,6 +45,13 @@ layout: pill # or compact
 # tap_action: toggle # toggle | more-info | none
 # hold_action: none # toggle | more-info | none (long press)
 # double_tap_action: none # toggle | more-info | none
+# Interaction and feedback:
+# haptics: true # vibrate on every step and action (needs navigator.vibrate)
+# haptics_style: medium # light | medium | heavy
+# animations: true # value and button animations; false makes the card static
+# animation_duration: 220 # milliseconds for the value animation
+# The target number is draggable (drag to adjust, arrow keys work too) and
+# slider/drag/arrow commits are batched into a single service call.
 ```
 
 No legacy card-tag or layout aliases are supported.

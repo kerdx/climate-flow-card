@@ -83,6 +83,7 @@ const STRINGS = {
       language: 'Language', entity_picture: 'Entity picture',
       show_entity_picture: 'Show entity picture', main_temperature: 'Main temperature',
       tap_action: 'Tap action', hold_action: 'Hold action', double_tap_action: 'Double tap action',
+      haptics: 'Haptics', haptics_style: 'Haptic style', animations: 'Animations', animation_duration: 'Animation duration',
     },
     modes: { heat: 'Heat', cool: 'Cool', off: 'Off', auto: 'Auto', heat_cool: 'Heat / cool', dry: 'Dry', fan_only: 'Fan only' },
     statuses: { heating: 'Heating', cooling: 'Cooling', drying: 'Drying', fan: 'Fan', idle: 'Idle', off: 'Off', preheating: 'Preheating', defrosting: 'Defrosting', heat: 'Heat', cool: 'Cool', auto: 'Auto', heat_cool: 'Heat / cool', dry: 'Dry', fan_only: 'Fan only' },
@@ -152,6 +153,10 @@ const STRINGS = {
       tap_action: 'What a tap on the card background does.',
       hold_action: 'What a long press on the card background does.',
       double_tap_action: 'What a double tap on the card background does.',
+      haptics: 'Vibrate briefly on a temperature step or a card action; browsers without vibration support stay silent.',
+      haptics_style: 'Vibration pattern: light, medium or heavy.',
+      animations: 'Play the value and button animations; switch it off for a completely static card.',
+      animation_duration: 'Duration of the value animation in milliseconds (0 falls back to the default).',
     },
   },
   it: {
@@ -231,6 +236,7 @@ const STRINGS = {
       language: 'Lingua', entity_picture: 'Foto entità',
       show_entity_picture: 'Mostra foto entità', main_temperature: 'Temperatura principale',
       tap_action: 'Azione al tocco', hold_action: 'Azione alla pressione lunga', double_tap_action: 'Azione al doppio tocco',
+      haptics: 'Feedback tattile', haptics_style: 'Stile feedback', animations: 'Animazioni', animation_duration: 'Durata animazione',
     },
     modes: { heat: 'Caldo', cool: 'Freddo', off: 'Spento', auto: 'Automatico', heat_cool: 'Caldo / freddo', dry: 'Deumidificazione', fan_only: 'Solo ventilazione' },
     statuses: { heating: 'Riscaldamento', cooling: 'Raffreddamento', drying: 'Deumidificazione', fan: 'Ventilazione', idle: 'Inattivo', off: 'Spento', preheating: 'Preriscaldamento', defrosting: 'Sbrinamento', heat: 'Caldo', cool: 'Freddo', auto: 'Automatico', heat_cool: 'Caldo / freddo', dry: 'Deumidificazione', fan_only: 'Solo ventilazione' },
@@ -297,6 +303,10 @@ const STRINGS = {
       tap_action: 'Cosa fa un tocco sullo sfondo della card.',
       hold_action: 'Cosa fa una pressione lunga sullo sfondo della card.',
       double_tap_action: 'Cosa fa un doppio tocco sullo sfondo della card.',
+      haptics: 'Breve vibrazione a ogni passo temperatura o azione della card; i browser senza vibrazione restano silenti.',
+      haptics_style: 'Schema di vibrazione: light, medium o heavy.',
+      animations: 'Riproduce le animazioni di valore e pulsanti; disattivalo per una card completamente statica.',
+      animation_duration: 'Durata dell’animazione del valore in millisecondi (0 usa il default).',
     },
   },
 };
@@ -466,6 +476,43 @@ export const heroTemperaturePlan = (options = {}) => {
   const chip = hero === 'target' ? 'current' : 'target';
   return { hero, chip: available[chip] ? chip : null };
 };
+// Haptics: a short vibration per step or action, only when the browser
+// exposes one (silent no-op elsewhere, so nothing needs feature detection at
+// the call site).
+export const HAPTIC_STYLES = ['light', 'medium', 'heavy'];
+export const HAPTIC_PATTERNS = { light: [8], medium: [16], heavy: [26] };
+export const hapticPattern = (style) => HAPTIC_PATTERNS[style] || HAPTIC_PATTERNS.medium;
+export const normalizeHapticStyle = (value) => (HAPTIC_STYLES.includes(value) ? value : 'medium');
+export const vibrateSupported = () => typeof globalThis.navigator?.vibrate === 'function';
+export const fireHaptic = (config, style) => {
+  if (!config || config.haptics === false) return false;
+  if (!vibrateSupported()) return false;
+  try { return globalThis.navigator.vibrate(hapticPattern(style || normalizeHapticStyle(config.haptics_style))) !== false; }
+  catch { return false; }
+};
+// Motion: animations can be switched off wholesale, and the duration feeds the
+// CSS custom property instead of being hardcoded per rule.
+export const ANIMATION_DURATION_DEFAULT = 220;
+export const normalizeAnimationDuration = (value) => {
+  const parsed = numeric(value);
+  return parsed !== null && parsed > 0 ? Math.min(2000, Math.round(parsed)) : ANIMATION_DURATION_DEFAULT;
+};
+// Commit batching: a slider or a drag can request several values in a row, so
+// the service call waits for a short pause (and is retried before the
+// optimistic value rolls back, unlike a single button press).
+export const COMMIT_DEBOUNCE_MS = 220;
+export const COMMIT_RETRY_MS = 400;
+export const COMMIT_RETRIES = 2;
+// Drag: a horizontal gesture must travel DRAG_THRESHOLD_PX before it stops
+// being a tap, and every DRAG_STEP_PX moves the target by one step so the
+// value snaps instead of wobbling.
+export const DRAG_THRESHOLD_PX = 6;
+export const DRAG_STEP_PX = 12;
+export const dragStepValue = (origin, deltaPx, step) => {
+  const base = numeric(origin), increment = numeric(step), delta = numeric(deltaPx);
+  if (base === null || increment === null || increment <= 0 || delta === null) return null;
+  return base + Math.round(delta / DRAG_STEP_PX) * increment;
+};
 export const isClimateActive = (entityOrState) => {
   const state = typeof entityOrState === 'string' ? entityOrState : entityOrState?.state;
   if (typeof state !== 'string') return false;
@@ -609,6 +656,7 @@ export const getEntitySuggestion = (_hass, entityId) => typeof entityId === 'str
 export const CARD_OPTION_DEFAULTS = {
   language: 'auto', main_temperature: 'target', surface: 'default', show_entity_picture: false,
   tap_action: 'toggle', hold_action: 'none', double_tap_action: 'none',
+  haptics: true, haptics_style: 'medium', animations: true, animation_duration: ANIMATION_DURATION_DEFAULT,
 };
 export const cardDefault = (name, entity) => {
   const base = defaultCardConfig(entity);
@@ -657,6 +705,10 @@ export const configSchema = [
     field('tap_action', { select: { mode: 'dropdown', options: CARD_ACTIONS } }),
     field('hold_action', { select: { mode: 'dropdown', options: CARD_ACTIONS } }),
     field('double_tap_action', { select: { mode: 'dropdown', options: CARD_ACTIONS } }),
+    field('haptics', { boolean: {} }),
+    field('haptics_style', { select: { mode: 'dropdown', options: HAPTIC_STYLES } }),
+    field('animations', { boolean: {} }),
+    field('animation_duration', { number: { min: 0, max: 2000, step: 10, mode: 'box' } }),
   ]),
 ];
 export const configSchemaFields = () => {
@@ -986,10 +1038,12 @@ export class ClimateFlowCardEditor extends HTMLElementBase {
       const control = row._fieldControl;
       if (!control) continue;
       if (control.tagName === 'INPUT' && control.type === 'checkbox') {
-        const checked = Boolean(this._config[name]);
+        // The raw config only carries non-default values, so a toggle must
+        // resolve through _value or every default reads as switched off.
+        const checked = Boolean(this._value(name));
         if (control.checked !== checked) control.checked = checked;
       } else if (control.type === 'color') {
-        const accent = normalizeAccentColor(this._config[name]);
+        const accent = normalizeAccentColor(this._value(name));
         if (accent) control.value = accent;
         if (row._colorReset) row._colorReset.disabled = !accent;
       } else if (control.classList?.contains('ed-seg')) {
@@ -1058,11 +1112,24 @@ export class ClimateFlowCard extends HTMLElementBase {
       if (picture) this.config.entity_picture = picture;
       else delete this.config.entity_picture;
     } else delete this.config.entity_picture;
+    // Feedback and motion options: booleans default to on, the style and the
+    // duration are normalised so the render never validates them again.
+    for (const key of ['haptics', 'animations']) {
+      const value = this.config[key];
+      if (value !== undefined && value !== null && value !== '' && typeof value !== 'boolean') throw new Error(`${key} must be true or false.`);
+      this.config[key] = value !== false;
+    }
+    if (this.config.haptics_style !== undefined && this.config.haptics_style !== null && this.config.haptics_style !== '' && !HAPTIC_STYLES.includes(this.config.haptics_style)) throw new Error(`haptics_style must be one of ${HAPTIC_STYLES.join(', ')}.`);
+    this.config.haptics_style = normalizeHapticStyle(this.config.haptics_style);
+    const animationDurationAbsent = this.config.animation_duration === undefined || this.config.animation_duration === null || this.config.animation_duration === '';
+    if (animationDurationAbsent) delete this.config.animation_duration;
+    else if (numeric(this.config.animation_duration) === null || numeric(this.config.animation_duration) <= 0) throw new Error('animation_duration must be a number of milliseconds greater than zero.');
+    else this.config.animation_duration = normalizeAnimationDuration(this.config.animation_duration);
     if (!this.shadowRoot) this.attachShadow({ mode: 'open' });
     this._renderPreservingDeltaFocus();
   }
   set hass(hass) { this._hass = hass; this._reconcileOptimistic(); this._renderPreservingDeltaFocus(); }
-  disconnectedCallback() { clearTimeout(this._optimisticTimer); this._optimisticTimer = null; this._optimistic = null; clearTimeout(this._tapTimer); this._tapTimer = null; clearTimeout(this._holdTimer); this._holdTimer = null; this._holdFired = false; this._lastTapAt = 0; }
+  disconnectedCallback() { clearTimeout(this._optimisticTimer); this._optimisticTimer = null; this._optimistic = null; clearTimeout(this._tapTimer); this._tapTimer = null; clearTimeout(this._holdTimer); this._holdTimer = null; clearTimeout(this._commitTimer); this._commitTimer = null; this._holdFired = false; this._lastTapAt = 0; this._detachHeroDrag(); this._dragConsumed = false; }
   getCardSize() { return this.config?.layout === 'compact' ? 2 : 1; }
   _service(domain, service, data) {
     if (!this._hass) return Promise.resolve();
@@ -1080,6 +1147,7 @@ export class ClimateFlowCard extends HTMLElementBase {
     // The only action that needs no entity lookup is `none`; `toggle` falls
     // back silently when the entity cannot be toggled (e.g. heat-only).
     if (action === 'none') return;
+    fireHaptic(this.config, 'light');
     if (action === 'more-info') {
       this.dispatchEvent(new CustomEvent('hass-more-info', { detail: { entityId: this.config.entity }, ['bub' + 'bles']: true, composed: true }));
       return;
@@ -1141,6 +1209,8 @@ export class ClimateFlowCard extends HTMLElementBase {
     if (accent) card.style.setProperty('--climate-flow-accent-color', accent);
     else card.style.removeProperty('--climate-flow-accent-color');
     card.dataset.surface = normalizeSurface(this.config?.surface);
+    card.dataset.motion = this.config?.animations === false ? 'off' : 'on';
+    card.style.setProperty('--cf-motion', `${normalizeAnimationDuration(this.config?.animation_duration)}ms`);
   }
   _paintIcon(box, glyph, picture) {
     // The entity picture replaces the glyph without removing the ha-icon node
@@ -1208,9 +1278,13 @@ export class ClimateFlowCard extends HTMLElementBase {
       .controls button:disabled{opacity:.45;cursor:default;background:var(--secondary-background-color)}
        .controls .setpoint{font-weight:600;min-width:58px;text-align:center;background:transparent;font-size:14px;padding:7px 2px}
        .controls select{font:inherit;font-size:13px;color:var(--primary-text-color);background:transparent;border:0;border-radius:999px;padding:7px 5px;cursor:pointer;min-width:54px;max-width:96px;overflow:hidden;text-overflow:ellipsis}
-       .controls select:focus-visible{outline:2px solid var(--primary-color);outline-offset:0}
-      .controls .setpoint:hover{background:transparent}
-      .controls .setpoint:focus-visible{outline-offset:0;border-radius:10px}
+       .controls select:focus-visible{outline:2px solid var(--primary-color);outline-offset:0}       .controls .setpoint:hover{background:transparent}
+       .controls .setpoint:focus-visible{outline-offset:0;border-radius:10px}
+       .controls .setpoint{touch-action:pan-y}[role="slider"]{cursor:ew-resize}
+       @keyframes cf-bump{0%{transform:translateY(3px) scale(.95);opacity:.6}60%{transform:translateY(-1px) scale(1.01);opacity:1}100%{transform:none;opacity:1}}
+       .bump{animation:cf-bump var(--cf-motion,220ms) cubic-bezier(.2,.7,.3,1)}
+       [data-motion="off"] *{animation:none!important;transition:none!important}
+       [data-motion="on"] button:active{transform:scale(.95)}
        .schedule{display:grid;place-items:center;flex:0 0 auto;padding:8px 11px;font:inherit;color:var(--primary-text-color);background:var(--secondary-background-color);border:0;border-radius:999px;cursor:pointer}
        .schedule[data-active="true"]{background:var(--climate-flow-accent-color,var(--primary-color));color:var(--text-primary-color,#fff)}
        .schedule:hover:not([data-active="true"]){background:var(--divider-color)}.schedule[data-active="true"]:hover{background:var(--climate-flow-accent-color,var(--primary-color))}.schedule:focus-visible{outline:2px solid var(--primary-color);outline-offset:2px}.schedule ha-icon{--mdc-icon-size:18px;display:block}
@@ -1272,10 +1346,19 @@ export class ClimateFlowCard extends HTMLElementBase {
       if (c.show_step_controls && adjustable) { const minus = document.createElement('button'); minus.dataset.delta = String(-step); minus.setAttribute('aria-label', t.decrease); minus.textContent = '−'; controls.append(minus); }
       const setpoint = document.createElement('button');
       setpoint.className = 'setpoint';
+      // The hero is adjustable only while it carries the target: with
+      // main_temperature=current it is a readout that opens the details.
+      const heroAdjustable = adjustable && plan.hero === 'target';
       if (plan.hero === 'target' && hasTarget) {
         setpoint.textContent = targetLabel;
         setpoint.title = targetAccessible;
-        setpoint.setAttribute('aria-label', t.openDetails(targetAccessible));
+        setpoint.setAttribute('aria-label', heroAdjustable ? (model.dual ? t.midpoint : t.targetLabel) : t.openDetails(targetAccessible));
+        if (heroAdjustable) {
+          setpoint.setAttribute('aria-valuetext', targetAccessible);
+          setpoint.setAttribute('aria-valuenow', String(model.value));
+          if (model.min !== null) setpoint.setAttribute('aria-valuemin', String(model.min));
+          if (model.max !== null) setpoint.setAttribute('aria-valuemax', String(model.max));
+        }
       } else if (plan.hero === 'current' && currentDisplay) {
         const accessible = t.currentTemperature(currentDisplay);
         setpoint.textContent = currentDisplay;
@@ -1286,6 +1369,7 @@ export class ClimateFlowCard extends HTMLElementBase {
         setpoint.setAttribute('aria-label', t.targetUnavailable);
         setpoint.disabled = true;
       }
+      this._markHeroControl(setpoint, heroAdjustable);
       controls.append(setpoint);
       if (c.show_step_controls && adjustable) { const plus = document.createElement('button'); plus.dataset.delta = String(step); plus.setAttribute('aria-label', t.increase); plus.textContent = '+'; controls.append(plus); }
       // HVAC modes were compact-only, so the show_mode_buttons option silently
@@ -1297,11 +1381,9 @@ export class ClimateFlowCard extends HTMLElementBase {
       const pause = override ? null : activePause(program?.pause);
       if (pause) { const badge=document.createElement('span'); badge.className='override-badge'; badge.textContent=t.pauseActive(formatOverrideExpiry(pause.until,locale)); const status=root.querySelector('.status'); status.hidden=false; status.append(badge); const resume=document.createElement('button'); resume.textContent=t.resumeSchedule; resume.setAttribute('aria-label',t.resumeSchedule); resume.addEventListener('click',()=>this._service('climate_flow_scheduler','resume_program',{climate_entity:c.entity})); controls.append(resume); }
       if (!controls.children.length) controls.hidden = true;
-      setpoint.addEventListener('click', () => {
-        if (setpoint.disabled) return;
-        this.dispatchEvent(new CustomEvent('hass-more-info', { detail: { entityId: c.entity }, ['bub' + 'bles']: true, composed: true }));
-      });
-      controls.querySelectorAll('[data-delta]').forEach((b) => b.addEventListener('click', () => this._setTemperature(target + Number(b.dataset.delta), e)));
+      this._bindHeroControls(setpoint, { entity: c.entity, adjustable: heroAdjustable });
+      this._markHeroMotion(setpoint);
+      controls.querySelectorAll('[data-delta]').forEach((b) => b.addEventListener('click', () => { fireHaptic(c, 'medium'); this._setTemperature(target + Number(b.dataset.delta), e); }));
     }
   }
   _renderCompact() {
@@ -1335,7 +1417,12 @@ export class ClimateFlowCard extends HTMLElementBase {
       .icon[data-active="true"]{background:var(--cf-accent);color:var(--text-primary-color,#fff);border-color:transparent;box-shadow:0 0 0 4px color-mix(in srgb,var(--cf-accent) 20%,transparent)}
       .icon ha-icon{--mdc-icon-size:20px}.icon img{width:100%;height:100%;object-fit:cover;border-radius:50%}.icon ha-icon[hidden]{display:none}.title{font-size:15px;font-weight:600;letter-spacing:-.01em;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}.chips{display:flex;gap:6px;flex:0 1 auto;min-width:0;overflow:hidden}.chip{font-size:11px;font-weight:600;padding:5px 9px;border-radius:999px;background:var(--secondary-background-color);color:var(--secondary-text-color);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:110px;flex:0 1 auto;border:1px solid transparent}
       .chip.state{background:color-mix(in srgb,var(--cf-accent) 15%,transparent);color:var(--cf-accent);border-color:color-mix(in srgb,var(--cf-accent) 30%,transparent)}
-      .target{font-size:34px;line-height:1.05;color:var(--primary-text-color);font-weight:700;letter-spacing:-.03em;flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums;display:flex;align-items:baseline;gap:3px}.target strong{font:inherit}.target .unit{font-size:14px;font-weight:600;letter-spacing:0;color:var(--secondary-text-color)}
+      .target{font-size:34px;line-height:1.05;color:var(--primary-text-color);font-weight:700;letter-spacing:-.03em;flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums;display:flex;align-items:baseline;gap:3px;touch-action:pan-y}.target strong{font:inherit}.target .unit{font-size:14px;font-weight:600;letter-spacing:0;color:var(--secondary-text-color)}
+      [role="slider"]{cursor:ew-resize}
+      @keyframes cf-bump{0%{transform:translateY(3px) scale(.95);opacity:.6}60%{transform:translateY(-1px) scale(1.01);opacity:1}100%{transform:none;opacity:1}}
+      .bump{animation:cf-bump var(--cf-motion,220ms) cubic-bezier(.2,.7,.3,1)}
+      [data-motion="off"] *{animation:none!important;transition:none!important}
+      [data-motion="on"] button:active{transform:scale(.95)}
       input[type=range]{-webkit-appearance:none;appearance:none;width:auto;flex:1 1 70px;min-width:60px;height:24px;background:transparent;margin:0;cursor:pointer}
       input[type=range]::-webkit-slider-runnable-track{height:6px;border-radius:999px;background:linear-gradient(to right,var(--cf-accent) var(--fill,50%),var(--divider-color) var(--fill,50%))}
       input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:16px;height:16px;margin-top:-5px;border-radius:50%;background:var(--text-primary-color,#fff);border:2px solid var(--cf-accent);box-shadow:0 2px 6px rgba(0,0,0,.4)}
@@ -1390,6 +1477,21 @@ export class ClimateFlowCard extends HTMLElementBase {
         }
         targetText.append(value, unitText);
       }
+      // The hero is adjustable only while it carries the target; otherwise it
+      // stays a button that opens the entity details (it used to fall through
+      // to the background toggle).
+      const heroAdjustable = hasTarget && model.controllable && step !== null && step > 0 && plan.hero === 'target';
+      const descriptive = targetText.getAttribute('aria-label') || t.targetUnavailable;
+      this._markHeroControl(targetText, heroAdjustable);
+      targetText.setAttribute('aria-label', heroAdjustable ? (model.dual ? t.midpoint : t.targetLabel) : descriptive);
+      if (heroAdjustable) {
+        targetText.setAttribute('aria-valuetext', descriptive);
+        targetText.setAttribute('aria-valuenow', String(model.value));
+        if (model.min !== null) targetText.setAttribute('aria-valuemin', String(model.min));
+        if (model.max !== null) targetText.setAttribute('aria-valuemax', String(model.max));
+      }
+      this._bindHeroControls(targetText, { entity: c.entity, adjustable: heroAdjustable });
+      if (showHero) this._markHeroMotion(targetText);
       body.append(targetText);
       if (hasTarget && model.controllable && step !== null && step > 0) {
          if (c.show_step_controls) for (const [d,label,text] of [[-step,t.decrease,'−'],[step,t.increase,'+']]) { const button=document.createElement('button'); button.dataset.delta=String(d); button.setAttribute('aria-label',label); button.textContent=text; body.append(button); }
@@ -1403,9 +1505,9 @@ export class ClimateFlowCard extends HTMLElementBase {
       const pause = override ? null : activePause(program?.pause);
       if (pause) { const badge=document.createElement('span'); badge.className='badge'; badge.textContent=t.pauseActive(formatOverrideExpiry(pause.until,this._hass?.locale?.language)); body.append(badge); const resume=document.createElement('button'); resume.textContent=t.resumeSchedule; resume.setAttribute('aria-label',t.resumeSchedule); resume.addEventListener('click',()=>this._service('climate_flow_scheduler','resume_program',{climate_entity:c.entity})); body.append(resume); }
     }
-    this.shadowRoot.querySelector('.slider')?.addEventListener('change', (ev) => this._setTemperature(ev.target.value, e));
+    this.shadowRoot.querySelector('.slider')?.addEventListener('change', (ev) => { fireHaptic(c, 'medium'); this._setTemperature(ev.target.value, e, { debounce: true }); });
     this.shadowRoot.querySelector('.slider')?.addEventListener('input', (ev) => paintSliderFill(ev.target));
-    root.querySelectorAll('[data-delta]').forEach((b) => b.addEventListener('click', () => this._setTemperature(target + Number(b.dataset.delta), e)));
+    root.querySelectorAll('[data-delta]').forEach((b) => b.addEventListener('click', () => { fireHaptic(c, 'medium'); this._setTemperature(target + Number(b.dataset.delta), e); }));
     root.querySelector('select.hvac-mode')?.addEventListener('change', (ev) => { if (!unavailable && modes(e).includes(ev.target.value)) this._service('climate', 'set_hvac_mode', { entity_id: c.entity, hvac_mode: ev.target.value }); });
     schedule.addEventListener('click', () => this._openSchedule());
   }
@@ -1616,12 +1718,163 @@ export class ClimateFlowCard extends HTMLElementBase {
       card.addEventListener('pointercancel', cancelHold);
     }
   }
+  _heroStep() { return effectiveStep(this._hass?.states?.[this.config.entity], this.config.step, this._stepOverride); }
+  _heroTarget() {
+    const model = targetModel(this._displayEntity(this._hass?.states?.[this.config.entity]));
+    return model.available && model.controllable ? model.value : null;
+  }
+  _heroPayload(value) {
+    const base = this._displayEntity(this._hass?.states?.[this.config.entity]);
+    return temperaturePayload(base, value, this.config.step, this._stepOverride);
+  }
+  _markHeroControl(element, adjustable) {
+    // role=slider only while the hero carries a value the user can change;
+    // anything else stays an ordinary control that opens the entity details.
+    element.setAttribute('role', adjustable ? 'slider' : 'button');
+    if (element.tagName?.toLowerCase() !== 'button') element.setAttribute('tabindex', '0');
+  }
+  _markHeroMotion(element) {
+    // The whole shadow tree is rebuilt on every update, so the entrance
+    // animation is only started when the number really changed.
+    const text = element?.textContent || '';
+    const changed = this._lastHeroText !== undefined && this._lastHeroText !== text;
+    this._lastHeroText = text;
+    if (!changed || this.config.animations === false || this._drag) return;
+    element.classList.add('bump');
+    element.addEventListener('animationend', () => element.classList.remove('bump'), { once: true });
+  }
+  _patchHero(value) {
+    // During a drag the hero must follow the pointer without rebuilding the
+    // shadow tree: a rebuild would replace the node under the finger.
+    const root = this.shadowRoot;
+    const hero = root?.querySelector?.('.setpoint, .target');
+    if (!hero) return false;
+    const payload = this._heroPayload(value);
+    if (!payload) return false;
+    const base = this._displayEntity(this._hass?.states?.[this.config.entity]);
+    const model = targetModel({ ...base, attributes: { ...base.attributes, ...payload } });
+    if (!model.available) return false;
+    const locale = this._hass?.locale?.language;
+    const unit = this._hass?.config?.unit_system?.temperature || '°C';
+    const t = this._strings();
+    const low = formatNumber(model.low, locale), high = formatNumber(model.high, locale);
+    const single = formatNumber(model.value, locale);
+    const accessible = model.dual ? t.targetRange(low, high, unit) : t.target(single, unit);
+    const strong = hero.querySelector('strong');
+    if (strong) strong.textContent = model.dual ? `${low}–${high}` : single;
+    else hero.textContent = model.dual ? `${low}–${high} ${unit}` : `${single} ${unit}`;
+    hero.title = accessible;
+    hero.setAttribute('aria-valuetext', accessible);
+    hero.setAttribute('aria-valuenow', String(model.value));
+    const slider = root.querySelector('.slider');
+    if (slider) { slider.value = String(model.value); paintSliderFill(slider); }
+    this._lastHeroText = hero.textContent;
+    return true;
+  }
+  _bindHeroControls(element, options) {
+    const { entity, adjustable } = options;
+    element.addEventListener('click', () => {
+      // A finished drag is not a tap: its trailing click is swallowed here.
+      if (this._dragConsumed) { this._dragConsumed = false; return; }
+      if (element.disabled) return;
+      this.dispatchEvent(new CustomEvent('hass-more-info', { detail: { entityId: entity }, ['bub' + 'bles']: true, composed: true }));
+    });
+    if (!adjustable) {
+      // The compact hero is a span, so it needs its own Enter/Space activation.
+      if (element.tagName?.toLowerCase() !== 'button') element.addEventListener('keydown', (event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); element.click(); } });
+      return;
+    }
+    element.addEventListener('pointerdown', (event) => this._startHeroDrag(event));
+    element.addEventListener('keydown', (event) => {
+      const sign = event.key === 'ArrowUp' || event.key === 'ArrowRight' ? 1 : (event.key === 'ArrowDown' || event.key === 'ArrowLeft' ? -1 : 0);
+      const step = this._heroStep();
+      if (!sign || step === null) return;
+      const origin = this._heroTarget();
+      if (origin === null) return;
+      event.preventDefault();
+      fireHaptic(this.config, 'medium');
+      // Held arrow keys repeat, so the commit waits like a drag does.
+      this._setTemperature(origin + sign * step, this._hass?.states?.[entity], { debounce: true });
+    });
+  }
+  _startHeroDrag(event) {
+    if (event.pointerType === 'mouse' && typeof event.button === 'number' && event.button !== 0) return;
+    const origin = this._heroTarget(), step = this._heroStep();
+    if (origin === null || step === null) return;
+    const win = globalThis.window;
+    if (!win?.addEventListener) return;
+    this._dragConsumed = false;
+    this._drag = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, origin, step, active: false, value: origin };
+    const onMove = (moveEvent) => {
+      const drag = this._drag;
+      if (!drag || (drag.pointerId !== undefined && moveEvent.pointerId !== undefined && drag.pointerId !== moveEvent.pointerId)) return;
+      const dx = moveEvent.clientX - drag.x, dy = moveEvent.clientY - drag.y;
+      if (!drag.active) {
+        // Below the threshold it is still a tap; a vertical move is a scroll.
+        if (Math.abs(dx) < DRAG_THRESHOLD_PX || Math.abs(dx) <= Math.abs(dy)) return;
+        drag.active = true;
+        this._dragConsumed = true;
+      }
+      if (typeof moveEvent.preventDefault === 'function') moveEvent.preventDefault();
+      const value = dragStepValue(drag.origin, dx, drag.step);
+      if (value === null || value === drag.value) return;
+      const bounded = clampTarget(value, this._hass?.states?.[this.config.entity], drag.step, this._stepOverride);
+      if (bounded === null || bounded === drag.value) return;
+      drag.value = bounded;
+      if (this._patchHero(bounded)) fireHaptic(this.config, 'light');
+    };
+    const onUp = () => {
+      const drag = this._drag;
+      this._detachHeroDrag();
+      if (!drag?.active) return;
+      this._dragConsumed = true;
+      const payload = this._heroPayload(drag.value);
+      // Nothing to apply (out of range): put the real value back on screen.
+      if (!payload) { this._renderPreservingDeltaFocus(); return; }
+      this._setTemperature(drag.value, this._hass?.states?.[this.config.entity], { debounce: true });
+    };
+    const onCancel = () => {
+      const drag = this._drag;
+      this._detachHeroDrag();
+      if (!drag?.active) return;
+      // Aborted gesture: nothing was sent, so the display falls back to the
+      // real state instead of keeping the value the finger had reached.
+      this._dragConsumed = true;
+      this._renderPreservingDeltaFocus();
+    };
+    win.addEventListener('pointermove', onMove, { passive: false });
+    win.addEventListener('pointerup', onUp);
+    win.addEventListener('pointercancel', onCancel);
+    win.addEventListener('blur', onCancel);
+    this._dragListeners = { onMove, onUp, onCancel };
+  }
+  _detachHeroDrag() {
+    const win = globalThis.window, listeners = this._dragListeners;
+    if (win && listeners) {
+      win.removeEventListener('pointermove', listeners.onMove);
+      win.removeEventListener('pointerup', listeners.onUp);
+      win.removeEventListener('pointercancel', listeners.onCancel);
+      win.removeEventListener('blur', listeners.onCancel);
+    }
+    this._dragListeners = null;
+    this._drag = null;
+  }
   _focusedDelta() {
     // Which +/- control owns focus right now. The optimistic re-render replaces
     // the whole shadow tree, which silently drops focus otherwise.
     try {
       const delta = this.shadowRoot?.activeElement?.dataset?.delta;
       return delta === undefined || delta === null || delta === '' ? null : String(delta);
+    } catch { return null; }
+  }
+  _focusedHero() {
+    // Arrow-key adjustments optimistically rebuild the card too; retain focus
+    // on the adjustable hero so a held key can repeat across those renders.
+    try {
+      const active = this.shadowRoot?.activeElement;
+      if (active?.matches?.('.setpoint[role="slider"]')) return '.setpoint[role="slider"]';
+      if (active?.matches?.('.target[role="slider"]')) return '.target[role="slider"]';
+      return null;
     } catch { return null; }
   }
   _restoreDeltaFocus(delta) {
@@ -1644,14 +1897,28 @@ export class ClimateFlowCard extends HTMLElementBase {
       root.querySelector(`[data-delta="${delta}"]`)?.focus?.();
     } catch {}
   }
+  _restoreHeroFocus(selector) {
+    if (!selector) return;
+    try {
+      const root = this.shadowRoot;
+      if (!root?.querySelector) return;
+      const active = root.activeElement;
+      if (active && active !== root && active.isConnected) return;
+      const doc = typeof document === 'undefined' ? null : document;
+      const docActive = doc?.activeElement;
+      if (docActive && docActive !== doc.body && docActive !== (root.host || this)) return;
+      root.querySelector(selector)?.focus?.();
+    } catch {}
+  }
   _renderPreservingDeltaFocus() {
-    // Wrapper around _render() for every path that rebuilds the whole card
-    // (config/hass updates, the optimistic update, its 8s timeout and service
-    // rollback): capture the focused +/- before the swap, rebuild, and give
-    // focus back only if the rebuild dropped it.
+    // Wrapper around _render() for every path that rebuilds the whole card:
+    // capture focused +/- or slider hero before the swap, rebuild, and restore
+    // focus only if the rebuild dropped it.
     const delta = this._focusedDelta();
+    const hero = this._focusedHero();
     this._render();
     this._restoreDeltaFocus(delta);
+    this._restoreHeroFocus(hero);
   }
   _requestManualOverride(target, step = null) {
     const t = this._strings();
@@ -1681,7 +1948,7 @@ export class ClimateFlowCard extends HTMLElementBase {
     this.shadowRoot.append(dialog); this._overrideDialogOpen = true; dialog.showModal();
     dialog.querySelector('.choices button')?.focus();
   }
-  _setTemperature(value, entity) {
+  _setTemperature(value, entity, options = {}) {
     const base=this._displayEntity(this._hass?.states?.[this.config.entity] || entity);
     const payload = temperaturePayload(base, value, this.config.step, this._stepOverride);
     const program = this._scheduleProgram();
@@ -1689,7 +1956,20 @@ export class ClimateFlowCard extends HTMLElementBase {
       if (payload?.temperature === undefined) { this._showServiceError(this._strings().dualOverrideUnsupported); return; }
       return this._requestManualOverride(payload.temperature, this._stepOverride);
     }
-    if (payload) { clearTimeout(this._optimisticTimer); this._optimistic={entityId:this.config.entity,payload}; this._renderPreservingDeltaFocus(); this._optimisticTimer=setTimeout(()=>{this._optimistic=null;this._optimisticTimer=null;this._renderPreservingDeltaFocus();},8000); const seq=this._optimistic; Promise.resolve().then(()=>this._hass?.callService('climate','set_temperature',{entity_id:this.config.entity,...payload})).catch(()=>{if(this._optimistic===seq){clearTimeout(this._optimisticTimer);this._optimistic=null;this._renderPreservingDeltaFocus();}}); }
+    if (payload) { clearTimeout(this._optimisticTimer); this._optimistic={entityId:this.config.entity,payload}; this._renderPreservingDeltaFocus(); this._optimisticTimer=setTimeout(()=>{this._optimistic=null;this._optimisticTimer=null;this._renderPreservingDeltaFocus();},8000); const seq=this._optimistic;
+      // Continuous inputs (slider, drag, held arrows) batch into one call after
+      // a short pause; a single button press keeps its immediate call.
+      if (options.debounce) { clearTimeout(this._commitTimer); this._commitTimer=setTimeout(()=>{this._commitTimer=null;this._commitTemperature(payload,seq);},COMMIT_DEBOUNCE_MS); return; }
+      Promise.resolve().then(()=>this._hass?.callService('climate','set_temperature',{entity_id:this.config.entity,...payload})).catch(()=>{if(this._optimistic===seq){clearTimeout(this._optimisticTimer);this._optimistic=null;this._renderPreservingDeltaFocus();}}); }
+  }
+  _commitTemperature(payload, seq, attempt = 0) {
+    // A batched commit is worth retrying before the optimistic value is given
+    // up: the gesture already collapsed several steps into this one call.
+    Promise.resolve().then(()=>this._hass?.callService('climate','set_temperature',{entity_id:this.config.entity,...payload})).catch(()=>{
+      if (this._optimistic !== seq) return;
+      if (attempt < COMMIT_RETRIES) { this._commitTimer=setTimeout(()=>{this._commitTimer=null;this._commitTemperature(payload,seq,attempt+1);},COMMIT_RETRY_MS); return; }
+      if(this._optimistic===seq){clearTimeout(this._optimisticTimer);this._optimistic=null;this._renderPreservingDeltaFocus();}
+    });
   }
 }
 

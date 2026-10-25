@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.5.0
+
+- Fix the card editor showing every toggle as switched off (the schedule calendar, HVAC selector, +/- controls, haptics and animations included) while the card rendered them active: the field sync read the stripped config, which only carries non-default values, instead of resolving the effective value.
+- Drag the target number to change it: the hero of each layout is now a slider (`role="slider"`, arrow keys included) that follows the pointer, snaps one step every 12 px, clamps to the entity limits, and commits once when the finger is released. A gesture shorter than 6 px is still a tap, a vertical move is left to scrolling, and an aborted gesture restores the real value without sending anything.
+- Continuous inputs are batched: the slider, a drag and held arrow keys wait 220 ms for the gesture to settle before calling `set_temperature`, and a failed batch is retried twice before the optimistic value rolls back. A single +/- press keeps its immediate call.
+- Haptics: a short vibration per temperature step, arrow key and card action (`haptics` on by default, `haptics_style` light/medium/heavy). Browsers without `navigator.vibrate` stay silent.
+- Motion: the value animates only when it changes, buttons press in, and both can be turned off with `animations` (with `animation_duration` in milliseconds for the value animation).
+
 ## v1.4.0
 
 - Configurable card background actions: `tap_action`, `hold_action` and `double_tap_action` (`toggle`, `more-info`, `none`). The default keeps the historic tap-to-toggle, a double tap is detected within 300 ms, a long press after 550 ms and a press released early does nothing; the card's accessible label now states what a tap does.

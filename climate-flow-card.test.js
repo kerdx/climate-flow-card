@@ -2,7 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { ClimateFlowCard, ClimateFlowCardEditor, CLIMATE_FLOW_CARD_TAG, CLIMATE_FLOW_CARD_EDITOR_TAG, registerClimateFlowElements, isClimateFlowElementsRegistered, isHomeAssistantFrontendReady, scheduleClimateFlowReregistration, clampTarget, temperaturePayload, targetModel, hvacToggleMode, scheduleDraft, validateScheduleDraft, defaultCardConfig, configSchema, configSchemaFields, getEntitySuggestion, sameCardConfig, errorLabel, effectiveStep, normalizeLayout, isClimateActive, isScheduleEnabled, awayTemperaturePayload, schedulableModes, manualOverrideServicePayload, overrideDurationChoices, formatOverrideExpiry, overrideFocusSelector,
-  pauseServicePayload, pauseDurationChoices, activePause, PAUSE_DURATIONS, climateStatusKey, statusLabel, modeLabel, resolveLanguage, cardStrings, fieldLabel, pickEntityTimestamp, formatRelativeTime, formatNumber, pillStatusParts, currentTemperatureDisplay, CARD_SURFACES, normalizeAccentColor, normalizeSurface, sliderFillPercent, paintSliderFill, CARD_ACTIONS, normalizeCardAction, MODE_ACCENTS, modeAccentColor, cardLanguage, mainTemperatureKind, CARD_OPTION_DEFAULTS, cardDefault, stripCardDefaults, heroTemperaturePlan } from './custom_components/climate_flow_scheduler/www/climate-flow-card.js';
+  pauseServicePayload, pauseDurationChoices, activePause, PAUSE_DURATIONS, climateStatusKey, statusLabel, modeLabel, resolveLanguage, cardStrings, fieldLabel, pickEntityTimestamp, formatRelativeTime, formatNumber, pillStatusParts, currentTemperatureDisplay, CARD_SURFACES, normalizeAccentColor, normalizeSurface, sliderFillPercent, paintSliderFill, CARD_ACTIONS, normalizeCardAction, MODE_ACCENTS, modeAccentColor, cardLanguage, mainTemperatureKind, CARD_OPTION_DEFAULTS, cardDefault, stripCardDefaults, heroTemperaturePlan,
+  HAPTIC_STYLES, HAPTIC_PATTERNS, hapticPattern, normalizeHapticStyle, vibrateSupported, fireHaptic,
+  ANIMATION_DURATION_DEFAULT, normalizeAnimationDuration, COMMIT_DEBOUNCE_MS, COMMIT_RETRY_MS, COMMIT_RETRIES,
+  DRAG_THRESHOLD_PX, DRAG_STEP_PX, dragStepValue } from './custom_components/climate_flow_scheduler/www/climate-flow-card.js';
 
 test('module imports without browser DOM and exports the card class', () => {
   assert.equal(typeof ClimateFlowCard, 'function');
@@ -239,16 +242,26 @@ test('accent colour and surface options normalise, validate and reach the chrome
   const target = recording();
   Object.defineProperty(card, 'shadowRoot', { value: { querySelector: (selector) => (selector === 'ha-card' ? target : null) }, configurable: true });
   card._applyCardChrome();
-  assert.deepEqual(sets, [['--climate-flow-accent-color', '#abc']]);
+  assert.deepEqual(sets, [['--climate-flow-accent-color', '#abc'], ['--cf-motion', '220ms']]);
   assert.equal(target.dataset.surface, 'blend');
+  assert.equal(target.dataset.motion, 'on');
   // Without an override the property is removed and the surface falls back.
   const plain = configuredCard(defaultCardConfig('climate.living_room'));
   const plainTarget = recording();
   Object.defineProperty(plain, 'shadowRoot', { value: { querySelector: () => plainTarget }, configurable: true });
   plain._applyCardChrome();
-  assert.deepEqual(sets, [['--climate-flow-accent-color', '#abc']]);
   assert.deepEqual(removed, ['--climate-flow-accent-color']);
   assert.equal(plainTarget.dataset.surface, 'default');
+  assert.equal(plainTarget.dataset.motion, 'on');
+  // Disabling animations flips the motion flag and a duration override feeds
+  // the same custom property.
+  const still = configuredCard({ ...defaultCardConfig('climate.living_room'), animations: false, animation_duration: 500 });
+  const stillTarget = recording();
+  Object.defineProperty(still, 'shadowRoot', { value: { querySelector: () => stillTarget }, configurable: true });
+  still._applyCardChrome();
+  assert.equal(stillTarget.dataset.motion, 'off');
+  assert.equal(sets.at(-1)[0], '--cf-motion');
+  assert.equal(sets.at(-1)[1], '500ms');
 });
 
 test('card background actions normalise and keep the historic toggle behaviour', () => {
@@ -326,6 +339,208 @@ test('actions, mode accents, language and main temperature are wired in both lay
   // The entity picture swaps the glyph in both layouts.
   assert.ok((source.match(/this\._paintIcon\(/g) || []).length >= 2, 'both layouts paint the entity picture');
   assert.match(source, /_paintIcon\(box, glyph, picture\)/);
+});
+
+test('haptics, motion and drag helpers normalise without a vibration API', () => {
+  assert.deepEqual(HAPTIC_STYLES, ['light', 'medium', 'heavy']);
+  assert.deepEqual(hapticPattern('light'), [8]);
+  assert.deepEqual(hapticPattern('heavy'), [26]);
+  assert.deepEqual(hapticPattern('bogus'), HAPTIC_PATTERNS.medium);
+  assert.equal(normalizeHapticStyle('heavy'), 'heavy');
+  assert.equal(normalizeHapticStyle('nope'), 'medium');
+  assert.equal(normalizeAnimationDuration(500), 500);
+  assert.equal(normalizeAnimationDuration('250'), 250);
+  assert.equal(normalizeAnimationDuration(0), ANIMATION_DURATION_DEFAULT);
+  assert.equal(normalizeAnimationDuration('bad'), ANIMATION_DURATION_DEFAULT);
+  assert.equal(normalizeAnimationDuration(999999), 2000);
+  // Node exposes no navigator.vibrate: firing a haptic must be a silent no-op.
+  const original = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
+  if (original && !original.configurable) return;
+  delete globalThis.navigator;
+  assert.equal(vibrateSupported(), false);
+  assert.equal(fireHaptic({ haptics: true, haptics_style: 'heavy' }), false);
+  const seen = [];
+  Object.defineProperty(globalThis, 'navigator', { value: { vibrate: (pattern) => { seen.push(pattern); return true; } }, configurable: true, writable: true });
+  try {
+    assert.equal(vibrateSupported(), true);
+    assert.equal(fireHaptic({ haptics: true, haptics_style: 'light' }), true);
+    assert.deepEqual(seen, [[8]]);
+    assert.equal(fireHaptic({ haptics: true }), true);
+    assert.deepEqual(seen.at(-1), [16]);
+    assert.equal(fireHaptic({ haptics: false, haptics_style: 'heavy' }), false);
+    assert.equal(fireHaptic(undefined), false);
+    assert.deepEqual(seen.length, 2);
+  } finally {
+    if (original) Object.defineProperty(globalThis, 'navigator', original);
+    else delete globalThis.navigator;
+  }
+  // Config validation: bad feedback options fail loudly, good ones normalise.
+  assert.throws(() => configuredCard({ ...defaultCardConfig('climate.living_room'), haptics: 'yes' }), /haptics must be true or false/);
+  assert.throws(() => configuredCard({ ...defaultCardConfig('climate.living_room'), animations: 1 }), /animations must be true or false/);
+  assert.throws(() => configuredCard({ ...defaultCardConfig('climate.living_room'), haptics_style: 'soft' }), /haptics_style must be one of/);
+  assert.throws(() => configuredCard({ ...defaultCardConfig('climate.living_room'), animation_duration: -5 }), /animation_duration/);
+  const tuned = configuredCard({ ...defaultCardConfig('climate.living_room'), haptics: false, animations: false, haptics_style: 'heavy', animation_duration: '400' });
+  assert.equal(tuned.config.haptics, false);
+  assert.equal(tuned.config.animations, false);
+  assert.equal(tuned.config.haptics_style, 'heavy');
+  assert.equal(tuned.config.animation_duration, 400);
+  const defaults = configuredCard(defaultCardConfig('climate.living_room'));
+  assert.equal(defaults.config.haptics, true);
+  assert.equal(defaults.config.animations, true);
+  assert.equal(defaults.config.haptics_style, 'medium');
+  assert.equal(Object.hasOwn(defaults.config, 'animation_duration'), false);
+  // The feedback options are part of the default table, so the editor and the
+  // YAML stripping treat them like every other option.
+  for (const name of ['haptics', 'haptics_style', 'animations', 'animation_duration']) {
+    assert.equal(cardDefault(name, 'climate.living_room'), CARD_OPTION_DEFAULTS[name], name);
+    assert.ok(configSchemaFields().some((entry) => entry.name === name), `${name} is exposed in the editor`);
+    for (const lang of ['en', 'it']) assert.ok(cardStrings(lang).help[name], `${lang} help for ${name}`);
+  }
+});
+
+test('dragged values snap to the step and stay bounded', () => {
+  assert.equal(DRAG_THRESHOLD_PX, 6);
+  assert.equal(DRAG_STEP_PX, 12);
+  assert.equal(dragStepValue(20, 0, 0.5), 20);
+  assert.equal(dragStepValue(20, 12, 0.5), 20.5);
+  assert.equal(dragStepValue(20, 30, 0.5), 21.5);
+  assert.equal(dragStepValue(20, -13, 0.5), 19.5);
+  assert.equal(dragStepValue(20, 5, 0.5), 20, 'below the step threshold nothing moves');
+  assert.equal(dragStepValue(null, 12, 0.5), null);
+  assert.equal(dragStepValue(20, 12, 0), null);
+  assert.equal(dragStepValue(20, null, 0.5), null);
+});
+
+test('a batched commit coalesces the gesture, retries and rolls back at the end', async (t) => {
+  const entity = { state: 'heat', attributes: { temperature: 21, min_temp: 7, max_temp: 30, target_temp_step: 0.5 } };
+  const calls = [];
+  let failNext = true;
+  const card = configuredCard(defaultCardConfig('climate.living_room'));
+  card._hass = { states: { 'climate.living_room': entity }, services: {}, callService: (domain, service, data) => { calls.push([domain, service, { ...data }]); return failNext ? Promise.reject(new Error('boom')) : Promise.resolve(); } };
+  const scheduled = new Map();
+  let nextId = 1;
+  const realSetTimeout = globalThis.setTimeout, realClearTimeout = globalThis.clearTimeout;
+  globalThis.setTimeout = (fn, ms) => { const id = nextId++; scheduled.set(id, { fn, ms }); return id; };
+  globalThis.clearTimeout = (id) => { scheduled.delete(id); };
+  t.after(() => { globalThis.setTimeout = realSetTimeout; globalThis.clearTimeout = realClearTimeout; });
+  const flush = async () => { for (let i = 0; i < 6; i += 1) await Promise.resolve(); };
+  const timersOf = (ms) => [...scheduled.values()].filter((entry) => entry.ms === ms);
+  const fire = (ms) => { const entry = [...scheduled].find(([, timer]) => timer.ms === ms); assert.ok(entry, `a ${ms}ms timer exists`); scheduled.delete(entry[0]); entry[1].fn(); };
+
+  // The gesture shows its value at once and leaves the call for the pause.
+  card._setTemperature(22, null, { debounce: true });
+  assert.equal(card._optimistic.payload.temperature, 22, 'optimistic value is visible immediately');
+  assert.equal(calls.length, 0, 'no service call before the pause');
+  assert.equal(timersOf(COMMIT_DEBOUNCE_MS).length, 1, 'one debounced commit');
+  assert.equal(timersOf(8000).length, 1, 'the optimistic timeout still runs');
+
+  // A second request inside the window replaces the first one.
+  card._setTemperature(23, null, { debounce: true });
+  assert.equal(timersOf(COMMIT_DEBOUNCE_MS).length, 1, 'the pending commit is replaced, not stacked');
+  assert.equal(calls.length, 0);
+
+  fire(COMMIT_DEBOUNCE_MS);
+  await flush();
+  assert.equal(calls.length, 1, 'exactly one call for the whole gesture');
+  assert.deepEqual(calls[0], ['climate', 'set_temperature', { entity_id: 'climate.living_room', temperature: 23 }]);
+  assert.equal(timersOf(COMMIT_RETRY_MS).length, 1, 'a failure schedules a retry');
+  assert.equal(card._optimistic.payload.temperature, 23, 'the value stays visible across retries');
+
+  fire(COMMIT_RETRY_MS);
+  await flush();
+  assert.equal(calls.length, 2);
+  assert.equal(timersOf(COMMIT_RETRY_MS).length, 1);
+
+  fire(COMMIT_RETRY_MS);
+  await flush();
+  assert.equal(calls.length, 1 + COMMIT_RETRIES, 'the commit is attempted once plus the retries');
+  assert.equal(card._optimistic, null, 'the optimistic value rolls back when every attempt fails');
+  assert.equal(timersOf(COMMIT_RETRY_MS).length, 0, 'no further retries are queued');
+
+  // A successful attempt keeps the value and schedules nothing.
+  failNext = false;
+  card._setTemperature(24, null, { debounce: true });
+  fire(COMMIT_DEBOUNCE_MS);
+  await flush();
+  assert.equal(calls.length, 1 + COMMIT_RETRIES + 1);
+  assert.equal(card._optimistic.payload.temperature, 24, 'a confirmed value is kept');
+  assert.equal(timersOf(COMMIT_RETRY_MS).length, 0);
+});
+
+test('editor field sync resolves defaults instead of the raw config', () => {
+  // The editor keeps only non-default values in its config, so a control that
+  // reads the raw config back shows every default as switched off: the
+  // schedule-button toggle used to render off while the card showed it.
+  const source = readFileSync(new URL('./custom_components/climate_flow_scheduler/www/climate-flow-card.js', import.meta.url), 'utf8');
+  const start = source.indexOf('export class ClimateFlowCardEditor');
+  const end = source.indexOf('export class ClimateFlowCard extends');
+  const editor = source.slice(start, end);
+  assert.ok(start !== -1 && end > start, 'editor class slice');
+  assert.match(editor, /const checked = Boolean\(this\._value\(name\)\)/);
+  assert.match(editor, /const accent = normalizeAccentColor\(this\._value\(name\)\)/);
+  assert.match(editor, /const current = this\._value\(name, control\._options \|\| \[\]\)/);
+  assert.match(editor, /const value = this\._value\(name\) \?\? ''/);
+  // Building reads the resolved value too, not the stripped config.
+  assert.match(editor, /input\.checked = Boolean\(this\._value\(item\.name\)\)/);
+  // The only direct read of the raw config lives inside _value itself.
+  assert.equal((editor.match(/this\._config\[/g) || []).length, 1, 'raw config is read only by _value');
+});
+
+test('drag, batched commit, haptics and motion are wired in both layouts', () => {
+  const source = readFileSync(new URL('./custom_components/climate_flow_scheduler/www/climate-flow-card.js', import.meta.url), 'utf8');
+  // The drag listens on the window: the shadow tree is rebuilt during the
+  // gesture, so an element listener would be lost on the first move.
+  assert.match(source, /win\.addEventListener\('pointermove', onMove, \{ passive: false \}\)/);
+  assert.match(source, /win\.addEventListener\('pointerup', onUp\)/);
+  assert.match(source, /win\.addEventListener\('pointercancel', onCancel\)/);
+  assert.match(source, /win\.addEventListener\('blur', onCancel\)/);
+  assert.match(source, /Math\.abs\(dx\) < DRAG_THRESHOLD_PX \|\| Math\.abs\(dx\) <= Math\.abs\(dy\)/);
+  assert.match(source, /dragStepValue\(drag\.origin, dx, drag\.step\)/);
+  assert.match(source, /clampTarget\(value, this\._hass/);
+  // An aborted gesture re-renders from the real state instead of keeping the
+  // value the finger had reached, while a release commits it once.
+  assert.match(source, /const onCancel = \(\) => \{[\s\S]{0,400}?_renderPreservingDeltaFocus\(\);/);
+  assert.match(source, /const onUp = \(\) => \{[\s\S]{0,500}?_setTemperature\(drag\.value/);
+  // Both heroes are sliders while adjustable and buttons otherwise.
+  assert.equal((source.match(/this\._markHeroControl\(/g) || []).length, 2, 'hero role set in both layouts');
+  assert.equal((source.match(/this\._bindHeroControls\(/g) || []).length, 2, 'hero gestures bound in both layouts');
+  assert.match(source, /element\.setAttribute\('role', adjustable \? 'slider' : 'button'\)/);
+  assert.match(source, /adjustable && plan\.hero === 'target'/);
+  // Feedback on every deliberate step or action.
+  assert.ok((source.match(/fireHaptic\(/g) || []).length >= 6, 'haptics fire from actions, steps, keys and drags');
+  assert.match(source, /fireHaptic\(this\.config, 'light'\)/);
+  assert.match(source, /fireHaptic\(c, 'medium'\)/);
+  // Motion: one gate per layout, driven by the shared chrome.
+  assert.equal((source.match(/@keyframes cf-bump/g) || []).length, 2, 'both layouts define the value animation');
+  assert.equal((source.match(/\[data-motion="off"\] \*\{animation:none!important;transition:none!important\}/g) || []).length, 2);
+  assert.match(source, /card\.dataset\.motion = this\.config\?\.animations === false \? 'off' : 'on'/);
+  assert.match(source, /card\.style\.setProperty\('--cf-motion', `\$\{normalizeAnimationDuration\(this\.config\?\.animation_duration\)\}ms`\)/);
+  assert.match(source, /\.bump\{animation:cf-bump var\(--cf-motion,220ms\)/);
+  // Continuous inputs batch, direct ones do not.
+  assert.ok((source.match(/\{ debounce: true \}/g) || []).length >= 3, 'slider, keys and drag all batch their commit');
+  assert.match(source, /this\._setTemperature\(ev\.target\.value, e, \{ debounce: true \}\)/);
+  assert.match(source, /COMMIT_DEBOUNCE_MS\)/);
+  assert.match(source, /attempt < COMMIT_RETRIES/);
+  assert.match(source, /clearTimeout\(this\._commitTimer\)/);
+});
+
+test('hero slider focus survives optimistic renders for held arrow keys', () => {
+  const card = configuredCard(defaultCardConfig('climate.living_room'));
+  let active = {
+    matches: (selector) => selector === '.setpoint[role="slider"]',
+  };
+  let restored = false;
+  const hero = { focus: () => { restored = true; active = hero; }, isConnected: true };
+  const root = {
+    host: card,
+    get activeElement() { return active; },
+    querySelector: (selector) => selector === '.setpoint[role="slider"]' ? hero : null,
+  };
+  Object.defineProperty(card, 'shadowRoot', { value: root, configurable: true });
+  card._render = () => { active = root; };
+  card._renderPreservingDeltaFocus();
+  assert.equal(restored, true);
+  assert.equal(active, hero);
 });
 
 test('compact slider fill maps the value onto the entity range', () => {
@@ -1112,7 +1327,7 @@ test('every card rebuild restores focus on an active +/- delta and never steals 
 
   // Behavioural checks without a DOM: a fake shadow root records every step.
   const delta = { dataset: { delta: '-0.5' } };
-  const restored = ['activeElement', 'render', 'activeElement', 'query [data-delta="-0.5"]', 'focus'];
+  const restored = ['activeElement', 'activeElement', 'render', 'activeElement', 'query [data-delta="-0.5"]', 'focus'];
   const newHarness = (callService = () => {}) => {
     const card = configuredCard(defaultCardConfig('climate.living_room'));
     const order = [];
@@ -1159,10 +1374,10 @@ test('every card rebuild restores focus on an active +/- delta and never steals 
   kept.order.length = 0;
   kept.focusState.active = { dataset: {} };
   const second = scheduleOf(() => kept.card._setTemperature(22, null));
-  assert.deepEqual(kept.order, ['activeElement', 'render']);
+  assert.deepEqual(kept.order, ['activeElement', 'activeElement', 'render']);
   kept.order.length = 0;
   second[0].fn();
-  assert.deepEqual(kept.order, ['activeElement', 'render']);
+  assert.deepEqual(kept.order, ['activeElement', 'activeElement', 'render']);
 
   // Service rollback re-renders too, and behaves the same way.
   const failing = newHarness(() => Promise.reject(new Error('service failed')));
@@ -1177,14 +1392,14 @@ test('every card rebuild restores focus on an active +/- delta and never steals 
   scheduleOf(() => failingUnfocused.card._setTemperature(21, null));
   failingUnfocused.order.length = 0;
   await flush();
-  assert.deepEqual(failingUnfocused.order, ['activeElement', 'render']);
+  assert.deepEqual(failingUnfocused.order, ['activeElement', 'activeElement', 'render']);
 
   // A live control that still owns focus after the swap keeps it: nothing is
   // queried and nothing is refocused.
   const keptLive = newHarness();
   keptLive.focusState.active = { dataset: { delta: '-0.5' }, isConnected: true };
   keptLive.card.hass = { ...keptLive.card._hass, states: { ...keptLive.card._hass.states } };
-  assert.deepEqual(keptLive.order, ['activeElement', 'render', 'activeElement']);
+  assert.deepEqual(keptLive.order, ['activeElement', 'activeElement', 'render', 'activeElement']);
 
   // Focus already moved outside the card: the restore must not steal it back,
   // while focus dropped to the document body is still handed to the delta.
@@ -1194,7 +1409,7 @@ test('every card rebuild restores focus on an active +/- delta and never steals 
     const outside = newHarness();
     outside.focusState.active = delta;
     outside.card.hass = { ...outside.card._hass, states: { ...outside.card._hass.states } };
-    assert.deepEqual(outside.order, ['activeElement', 'render', 'activeElement']);
+    assert.deepEqual(outside.order, ['activeElement', 'activeElement', 'render', 'activeElement']);
     globalThis.document.activeElement = body;
     outside.order.length = 0;
     outside.card.hass = { ...outside.card._hass, states: { ...outside.card._hass.states } };
@@ -1205,11 +1420,11 @@ test('every card rebuild restores focus on an active +/- delta and never steals 
   const plain = newHarness();
   plain.focusState.active = { dataset: {} };
   plain.card._setTemperature(21.5, null);
-  assert.deepEqual(plain.order, ['activeElement', 'render']);
+  assert.deepEqual(plain.order, ['activeElement', 'activeElement', 'render']);
   plain.order.length = 0;
   plain.focusState.active = null;
   plain.card._setTemperature(22, null);
-  assert.deepEqual(plain.order, ['activeElement', 'render']);
+  assert.deepEqual(plain.order, ['activeElement', 'activeElement', 'render']);
   plain.order.length = 0;
   assert.equal(plain.card._focusedDelta(), null);
   plain.card._restoreDeltaFocus(null);
