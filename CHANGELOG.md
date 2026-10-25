@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.8.0
+
+- Refactor the pill, compact, and circular layouts around mobile-first styles and card-local container queries, improving readability and control access in narrow dashboard columns.
+- Reflow the pill controls on small cards, keep compact targets readable while controls scroll, and let circular controls wrap when space is limited without changing card behavior or the pill `− / +` appearance.
+- Replace the README's outdated screenshots with a renamed gallery covering both pill states, compact and circular layouts, and the schedule editor.
+
 ## v1.7.6
 
 - Refine card hierarchy with a clearer setpoint, quieter current-temperature chip, subtle HVAC-state indicator and softer surface styling.

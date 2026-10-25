@@ -8,21 +8,21 @@
 
 </div>
 
-**Climate Flow Card** (`custom:climate-flow-card`) provides three layouts: `pill`, `compact`, and the interactive `circular` thermostat dial. Its optional scheduler runs in the integration backend and persists across restarts.
-
-![Climate Flow Card pill layout preview](docs/images/climate-flow-card.png)
-
-Preview only: sample entity data; not captured from a live Home Assistant instance.
+**Climate Flow Card** (`custom:climate-flow-card`) provides three layouts: `pill`, `compact`, and the interactive `circular` thermostat dial. Each layout adapts to the card's own width, so it remains usable in narrow dashboard columns as well as on wide screens. Its optional scheduler runs in the integration backend and persists across restarts.
 
 ## Screenshots
 
-| Pill layout | Compact layout |
+| Pill layout · idle | Pill layout · active |
 | --- | --- |
-| ![Pill card with temperature and schedule controls](docs/images/Schermata%20del%202026-10-25%2014-03-42.png) | ![Compact card with a draggable target temperature](docs/images/Schermata%20del%202026-10-25%2014-05-35.png) |
+| ![Pill card in the idle state with current and target temperatures](docs/images/pill-idle.png) | ![Pill card in the active state with current and target temperatures](docs/images/pill-active.png) |
 
-| Weekly schedule dialog before adding slots | Weekly schedule with an enabled temperature slot |
+| Compact layout | Circular layout |
 | --- | --- |
-| ![Empty weekly schedule dialog](docs/images/Schermata%20del%202026-10-25%2014-04-12.png) | ![Weekly schedule with an enabled slot](docs/images/Schermata%20del%202026-10-25%2014-04-47.png) |
+| ![Compact card with target, step buttons, slider, and HVAC mode](docs/images/compact-layout.png) | ![Circular dial card with target, current temperature, and controls](docs/images/circular-layout.png) |
+
+| Empty weekly schedule | Weekly schedule with a slot |
+| --- | --- |
+| ![Weekly schedule editor before adding a slot](docs/images/schedule-empty.png) | ![Weekly schedule editor with an enabled temperature slot](docs/images/schedule-with-slot.png) |
 
 ## Install
 
@@ -41,7 +41,8 @@ The card is loaded by the integration itself, so it only exists once the integra
 
 ## Card layouts and controls
 
-- **`pill`** is the horizontal layout; **`compact`** uses two rows; **`circular`** displays an SVG dial with a 270° temperature arc.
+- **`pill`** is horizontal on wide cards and separates identity from controls on narrow cards; **`compact`** uses two rows and allows horizontal touch scrolling when its controls need more room; **`circular`** scales its SVG dial and wraps the controls on narrow cards.
+- Layout breakpoints follow each card's available width rather than the screen viewport, so a card in a narrow dashboard column responds correctly even on a desktop display.
 - The target can be adjusted with the +/- buttons, keyboard arrows, or by dragging the temperature control. Continuous slider, drag, and held-arrow changes are batched; failed requests are retried before the optimistic value rolls back. A single +/- press is applied immediately.
 - In `heat_cool` mode, the circular dial has separate low/high handles. Drag the nearer handle to adjust that bound while preserving at least one temperature step between them.
 - `main_temperature` chooses whether the current or target temperature is prominent. On the circular layout, choosing `current` makes the dial display-only; activating it opens the climate entity details.

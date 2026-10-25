@@ -37,14 +37,40 @@ test('temperature inputs and +/- controls use polished theme-aware styling', () 
 
 test('the pill-card target keeps its original unboxed setpoint appearance', () => {
   const source = readFileSync(new URL('./custom_components/climate_flow_scheduler/www/climate-flow-card.js', import.meta.url), 'utf8');
-  assert.match(source, /\.controls\{[^}]*gap:0;background:var\(--secondary-background-color\);border-radius:999px;padding:2px;/);
-  assert.match(source, /\.controls button\{[^}]*background:transparent;border:0;border-radius:999px;padding:7px 10px/);
-  assert.match(source, /\.controls \.setpoint\{font-weight:700;min-width:58px;text-align:center;background:transparent;font-size:15px;padding:7px 2px;font-variant-numeric:tabular-nums;letter-spacing:-\.02em\}/);
+  assert.match(source, /\.controls\{[^}]*gap:0;[^}]*background:var\(--secondary-background-color\);border-radius:999px;padding:2px;/);
+  assert.match(source, /\.controls button\{[^}]*background:transparent;border:0;border-radius:999px;padding:6px 7px/);
+  assert.match(source, /\.controls \.setpoint\{font-weight:700;min-width:48px;text-align:center;background:transparent;font-size:14px;padding:6px 2px;font-variant-numeric:tabular-nums;letter-spacing:-\.02em\}/);
+  assert.match(source, /@container climate-flow-card \(min-width:481px\)[^]*?\.controls \.setpoint\{min-width:58px;font-size:15px;padding:7px 2px\}/);
   assert.doesNotMatch(source, /\.controls button\[data-delta\]\{[^}]*border:/);
   assert.match(source, /\.controls button\[data-delta\]:not\(:disabled\):hover\{background:var\(--divider-color\);color:var\(--primary-text-color\);box-shadow:none\}/);
   assert.match(source, /\.controls button\[data-delta\]\.step-feedback:not\(:disabled\),\.controls button\[data-delta\]:not\(:disabled\):active\{background:var\(--divider-color\);color:var\(--primary-text-color\);box-shadow:none;transform:scale\(\.96\)\}/);
   assert.match(source, /\.status\[data-climate-state="active"\]\[data-show-state-indicator="true"\]::before/);
   assert.match(source, /\.status\[data-climate-state="unavailable"\]\{color:var\(--error-color\)\}/);
+});
+
+test('card layouts are mobile-first and scale from their own container width', () => {
+  const source = readFileSync(new URL('./custom_components/climate_flow_scheduler/www/climate-flow-card.js', import.meta.url), 'utf8');
+  const layouts = [
+    ['pill', source.slice(source.indexOf('_renderPill() {'), source.indexOf('_renderCompact() {'))],
+    ['compact', source.slice(source.indexOf('_renderCompact() {'), source.indexOf('_scheduleSensor() {'))],
+    ['circular', source.slice(source.indexOf('_renderCircular() {'), source.indexOf('_scheduleProgram() {'))],
+  ];
+  for (const [layout, css] of layouts) {
+    assert.match(css, /:host\{display:block;container-type:inline-size;container-name:climate-flow-card/, `${layout} measures its available card width`);
+    assert.match(css, /@container climate-flow-card \(max-width:320px\)/, `${layout} has a narrow-card treatment`);
+    assert.match(css, /@container climate-flow-card \(min-width:\d+px\)/, `${layout} enhances the mobile base when there is room`);
+    assert.doesNotMatch(css, /@media\s*\(max-width:\s*420px\)/, `${layout} does not rely on viewport-first overrides`);
+  }
+  assert.match(layouts[0][1], /\.icon\{width:34px;height:34px;flex:0 0 34px/);
+  assert.match(layouts[0][1], /\.pill\{display:grid;grid-template-columns:minmax\(0,1fr\) auto auto;grid-template-areas:"identity current schedule" "controls controls controls"/);
+  assert.match(layouts[0][1], /@container climate-flow-card \(min-width:481px\)\{[^]*?\.pill\{display:flex/);
+  assert.match(layouts[0][1], /\.controls\{[^}]*scrollbar-color:color-mix\(in srgb,var\(--secondary-text-color\) 42%,transparent\) transparent/);
+  assert.match(layouts[1][1], /\.target\{font-size:27px/);
+  assert.match(layouts[1][1], /\.target\{font-size:27px[^}]*flex:0 0 auto/);
+  assert.match(layouts[1][1], /\.body\{overflow-x:auto;overflow-y:hidden;[^}]*-webkit-overflow-scrolling:touch;overscroll-behavior-inline:contain\}/);
+  assert.match(layouts[1][1], /\.body\{[^}]*scrollbar-color:color-mix\(in srgb,var\(--secondary-text-color\) 42%,transparent\) transparent/);
+  assert.match(layouts[2][1], /\.dial\{width:min\(100%,196px\)/);
+  assert.match(layouts[2][1], /\.row\{display:flex;align-items:center;justify-content:center;gap:6px;flex-wrap:wrap;min-width:0;white-space:normal;overflow:visible\}/);
 });
 
 test('editor schema groups the options into localized sections', () => {
