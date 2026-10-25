@@ -1,5 +1,10 @@
 # Changelog
 
+## v1.7.3
+
+- Give the schedule editor a more polished, responsive layout with grouped program settings, clearer status, refined slot cards, day selectors and save actions, while retaining Home Assistant theme colors, focus visibility and reduced-motion support.
+- Upgrade target and outside-schedule temperature fields with clear units and focus feedback, and refine the `− / +` controls across all card layouts without changing their behavior or accessible labels.
+
 ## v1.7.2
 
 - Fix mixed single/range programs: set `hvac_mode` for scalar slots, switch to `heat_cool` for range slots, then restore the configured mode. The editor and backend reject mixed enabled programs without the required mode or entity capability.

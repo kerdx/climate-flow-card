@@ -1540,11 +1540,13 @@ export class ClimateFlowCard extends HTMLElementBase {
       .current ha-icon{--mdc-icon-size:15px;display:block;color:currentColor;opacity:.85}
       .current span{white-space:nowrap}
       .pill [hidden]{display:none!important}
-       .controls{flex:0 1 auto;min-width:0;display:flex;align-items:center;gap:0;background:var(--secondary-background-color);border-radius:999px;padding:2px;max-width:42%;overflow-x:auto;overflow-y:hidden;overscroll-behavior-inline:contain;scrollbar-width:thin}
+       .controls{flex:0 1 auto;min-width:0;display:flex;align-items:center;gap:3px;background:color-mix(in srgb,var(--climate-flow-accent-color,var(--primary-color)) 5%,var(--secondary-background-color));border:1px solid color-mix(in srgb,var(--divider-color) 75%,transparent);border-radius:999px;padding:3px;max-width:42%;overflow-x:auto;overflow-y:hidden;overscroll-behavior-inline:contain;scrollbar-width:thin;box-shadow:inset 0 1px 0 color-mix(in srgb,var(--text-primary-color,#fff) 8%,transparent)}
        .controls button{font:inherit;font-size:14px;color:var(--primary-text-color);background:transparent;border:0;border-radius:999px;padding:7px 10px;cursor:pointer;white-space:nowrap;flex:0 0 auto}
+       .controls button[data-delta]{display:grid;place-items:center;width:36px;height:36px;padding:0;border:1px solid color-mix(in srgb,var(--climate-flow-accent-color,var(--primary-color)) 26%,var(--divider-color));border-radius:12px;background:linear-gradient(180deg,color-mix(in srgb,var(--climate-flow-accent-color,var(--primary-color)) 12%,var(--secondary-background-color)),var(--secondary-background-color));color:var(--climate-flow-accent-color,var(--primary-color));font-size:19px;font-weight:700;line-height:1;font-variant-numeric:tabular-nums;box-shadow:inset 0 1px 0 color-mix(in srgb,var(--text-primary-color,#fff) 12%,transparent),0 2px 5px rgba(0,0,0,.12);transition:background-color .16s,border-color .16s,box-shadow .16s}
+       .controls button[data-delta]:hover{background:color-mix(in srgb,var(--climate-flow-accent-color,var(--primary-color)) 19%,var(--secondary-background-color));border-color:color-mix(in srgb,var(--climate-flow-accent-color,var(--primary-color)) 52%,var(--divider-color));box-shadow:0 3px 8px color-mix(in srgb,var(--climate-flow-accent-color,var(--primary-color)) 20%,transparent)}
        .controls button:focus-visible{outline:2px solid var(--primary-color);outline-offset:2px}
       .controls button:disabled{opacity:.45;cursor:default;background:var(--secondary-background-color)}
-       .controls .setpoint{font-weight:600;min-width:58px;text-align:center;background:transparent;font-size:14px;padding:7px 2px}
+       .controls .setpoint{font-weight:700;min-width:62px;text-align:center;background:color-mix(in srgb,var(--climate-flow-accent-color,var(--primary-color)) 9%,transparent);color:var(--primary-text-color);font-size:14px;font-variant-numeric:tabular-nums;padding:7px 5px}
        .controls select{font:inherit;font-size:13px;color:var(--primary-text-color);background:transparent;border:0;border-radius:999px;padding:7px 5px;cursor:pointer;min-width:54px;max-width:96px;overflow:hidden;text-overflow:ellipsis}
         .controls select:focus-visible{outline:2px solid var(--primary-color);outline-offset:0}
        .controls .setpoint:focus-visible{outline-offset:0;border-radius:10px}
@@ -1556,7 +1558,7 @@ export class ClimateFlowCard extends HTMLElementBase {
        .schedule{display:grid;place-items:center;flex:0 0 auto;padding:8px 11px;font:inherit;color:var(--primary-text-color);background:var(--secondary-background-color);border:0;border-radius:999px;cursor:pointer}
        .schedule[data-active="true"]{background:var(--climate-flow-accent-color,var(--primary-color));color:var(--text-primary-color,#fff)}
        .schedule:focus-visible{outline:2px solid var(--primary-color);outline-offset:2px}.schedule ha-icon{--mdc-icon-size:18px;display:block}
-        @media(max-width:420px){ha-card{padding:7px 8px}.pill{gap:7px}.icon{width:34px;height:34px;flex-basis:34px}.icon ha-icon{--mdc-icon-size:19px}.current{font-size:12px;padding:6px 8px}.controls button{padding:6px 7px;font-size:13px}.controls .setpoint{min-width:48px}.schedule{padding:6px 8px}}
+        @media(max-width:420px){ha-card{padding:7px 8px}.pill{gap:7px}.icon{width:34px;height:34px;flex-basis:34px}.icon ha-icon{--mdc-icon-size:19px}.current{font-size:12px;padding:6px 8px}.controls button{padding:6px 7px;font-size:13px}.controls button[data-delta]{width:32px;height:32px;padding:0;font-size:17px}.controls .setpoint{min-width:48px}.schedule{padding:6px 8px}}
         ${BUTTON_FEEDBACK_CSS}
       </style><ha-card tabindex="0" role="group" aria-label="Tap card background to toggle heating"><div class="pill"><span class="icon"><ha-icon></ha-icon></span><div class="meta"><span class="title"></span><span class="status"></span></div><span class="current"><ha-icon></ha-icon><span></span></span><div class="controls"></div><button class="schedule" aria-label="Open schedule details" title="Open schedule details"><ha-icon icon="mdi:calendar-clock"></ha-icon></button></div></ha-card>`;
     const root = this.shadowRoot;
@@ -1697,11 +1699,11 @@ export class ClimateFlowCard extends HTMLElementBase {
       input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:16px;height:16px;margin-top:-5px;border-radius:50%;background:var(--text-primary-color,#fff);border:2px solid var(--cf-accent);box-shadow:0 2px 6px rgba(0,0,0,.4)}
       input[type=range]::-moz-range-track{height:6px;border-radius:999px;background:linear-gradient(to right,var(--cf-accent) var(--fill,50%),var(--divider-color) var(--fill,50%))}
       input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;background:var(--text-primary-color,#fff);border:2px solid var(--cf-accent)}
-      .body button{padding:7px 11px;flex:0 0 auto;border-radius:999px;background:var(--secondary-background-color);border:1px solid var(--divider-color);font:inherit;font-size:13px;font-weight:600}.body button[data-delta]{width:34px;height:34px;padding:0;border-radius:12px;font-size:16px}.body button:hover{color:var(--cf-accent);border-color:color-mix(in srgb,var(--cf-accent) 45%,transparent)}
+      .body button{padding:7px 11px;flex:0 0 auto;border-radius:999px;background:var(--secondary-background-color);border:1px solid var(--divider-color);font:inherit;font-size:13px;font-weight:600}.body button[data-delta]{display:grid;place-items:center;width:38px;height:38px;padding:0;border-radius:13px;border:1px solid color-mix(in srgb,var(--cf-accent) 28%,var(--divider-color));background:linear-gradient(180deg,color-mix(in srgb,var(--cf-accent) 12%,var(--secondary-background-color)),var(--secondary-background-color));color:var(--cf-accent);font-size:19px;font-weight:700;line-height:1;box-shadow:inset 0 1px 0 color-mix(in srgb,var(--text-primary-color,#fff) 12%,transparent),0 2px 6px rgba(0,0,0,.14);transition:background-color .16s,border-color .16s,box-shadow .16s}.body button[data-delta]:hover{background:color-mix(in srgb,var(--cf-accent) 20%,var(--secondary-background-color));border-color:color-mix(in srgb,var(--cf-accent) 55%,var(--divider-color));box-shadow:0 4px 10px color-mix(in srgb,var(--cf-accent) 20%,transparent)}
       .body select{flex:0 0 auto;width:auto;min-width:78px;max-width:130px;overflow:hidden;text-overflow:ellipsis;font:inherit;font-size:13px;font-weight:600;color:var(--cf-accent);background:color-mix(in srgb,var(--cf-accent) 12%,transparent);border:1px solid color-mix(in srgb,var(--cf-accent) 30%,transparent);border-radius:12px;padding:8px 10px;cursor:pointer}
       button{font:inherit;color:var(--primary-text-color);background:var(--secondary-background-color);border:0;border-radius:999px;padding:7px 11px;cursor:pointer}.head .schedule{display:grid;place-items:center;flex:0 0 auto;padding:8px 10px}.head .schedule[data-active="true"]{background:var(--climate-flow-accent-color,var(--primary-color));color:var(--text-primary-color,#fff)}button:focus-visible,input:focus-visible{outline:2px solid var(--cf-accent);outline-offset:2px}.selected{background:var(--cf-accent);color:var(--text-primary-color,#fff)}
       select:focus-visible{outline:2px solid var(--cf-accent);outline-offset:2px}.badge{color:var(--error-color);font-size:11px;white-space:nowrap;flex:0 0 auto}.empty{color:var(--secondary-text-color);overflow:hidden;text-overflow:ellipsis}
-       @media(max-width:420px){ha-card{padding:12px 12px 13px;gap:10px}.head,.body{gap:6px}.target{font-size:27px}.body button[data-delta]{width:30px;height:30px}.chip{max-width:74px}}
+       @media(max-width:420px){ha-card{padding:12px 12px 13px;gap:10px}.head,.body{gap:6px}.target{font-size:27px}.body button[data-delta]{width:34px;height:34px}.chip{max-width:74px}}
        ${BUTTON_FEEDBACK_CSS}
      </style><ha-card tabindex="0" role="group" aria-label="Tap card background to toggle heating"><div class="head"><span class="icon"><ha-icon></ha-icon></span><span class="title"></span><span class="chips"></span><button class="schedule" aria-label="Open schedule details" title="Open schedule details"><ha-icon icon="mdi:calendar-clock"></ha-icon></button></div>
        <div class="body"></div></ha-card>`;
@@ -1853,7 +1855,7 @@ export class ClimateFlowCard extends HTMLElementBase {
       .hero strong{font:inherit}.hero .unit{font-size:15px;font-weight:600;letter-spacing:0;color:var(--secondary-text-color)}
       .sub{font-size:12px;color:var(--secondary-text-color);white-space:nowrap}
       .row{display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap;min-width:0;white-space:nowrap;overflow:hidden}
-      .row button{padding:7px 11px;border-radius:999px;background:var(--secondary-background-color);border:1px solid var(--divider-color);font:inherit;font-size:13px;font-weight:600;cursor:pointer}.row button[data-delta]{width:34px;height:34px;padding:0;border-radius:12px;font-size:16px}.row button:hover{color:var(--cf-accent);border-color:color-mix(in srgb,var(--cf-accent) 45%,transparent)}
+      .row button{padding:7px 11px;border-radius:999px;background:var(--secondary-background-color);border:1px solid var(--divider-color);font:inherit;font-size:13px;font-weight:600;cursor:pointer}.row button[data-delta]{display:grid;place-items:center;width:38px;height:38px;padding:0;border-radius:13px;border:1px solid color-mix(in srgb,var(--cf-accent) 28%,var(--divider-color));background:linear-gradient(180deg,color-mix(in srgb,var(--cf-accent) 12%,var(--secondary-background-color)),var(--secondary-background-color));color:var(--cf-accent);font-size:19px;font-weight:700;line-height:1;box-shadow:inset 0 1px 0 color-mix(in srgb,var(--text-primary-color,#fff) 12%,transparent),0 2px 6px rgba(0,0,0,.14);transition:background-color .16s,border-color .16s,box-shadow .16s}.row button[data-delta]:hover{background:color-mix(in srgb,var(--cf-accent) 20%,var(--secondary-background-color));border-color:color-mix(in srgb,var(--cf-accent) 55%,var(--divider-color));box-shadow:0 4px 10px color-mix(in srgb,var(--cf-accent) 20%,transparent)}
       .row select{flex:0 0 auto;min-width:78px;max-width:130px;overflow:hidden;text-overflow:ellipsis;font:inherit;font-size:13px;font-weight:600;color:var(--cf-accent);background:color-mix(in srgb,var(--cf-accent) 12%,transparent);border:1px solid color-mix(in srgb,var(--cf-accent) 30%,transparent);border-radius:12px;padding:8px 10px;cursor:pointer}
       button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--cf-accent);outline-offset:2px}
       .badge{color:var(--error-color);font-size:11px;white-space:nowrap}.empty{color:var(--secondary-text-color);font-size:13px;text-align:center}
@@ -1861,7 +1863,7 @@ export class ClimateFlowCard extends HTMLElementBase {
       .bump{animation:cf-bump var(--cf-motion,220ms) cubic-bezier(.2,.7,.3,1)}
       [data-motion="off"] *{animation:none!important;transition:none!important}
        [data-motion="on"] button:not([role="slider"]):active{transform:scale(.95)}
-       @media(max-width:420px){ha-card{padding:12px 12px 14px;gap:8px}.hero{font-size:30px}.dial{width:min(100%,196px)}.row button[data-delta]{width:30px;height:30px}}
+       @media(max-width:420px){ha-card{padding:12px 12px 14px;gap:8px}.hero{font-size:30px}.dial{width:min(100%,196px)}.row button[data-delta]{width:34px;height:34px}}
        ${BUTTON_FEEDBACK_CSS}
       </style><ha-card tabindex="0" role="group" aria-label="Tap card background to toggle heating"><div class="head"><span class="icon"><ha-icon></ha-icon></span><span class="title"></span><span class="chips"></span><button class="schedule" aria-label="Open schedule details" title="Open schedule details"><ha-icon icon="mdi:calendar-clock"></ha-icon></button></div><div class="stage"><svg class="dial" viewBox="0 0 200 200"><circle class="track" cx="100" cy="100" r="80" transform="rotate(135 100 100)"></circle><circle class="value" cx="100" cy="100" r="80" transform="rotate(135 100 100)"></circle><g class="thumbs"></g></svg><div class="center"><span class="hero"><strong></strong><span class="unit"></span></span><span class="sub"></span></div></div><div class="row"></div></ha-card>`;
     const root = this.shadowRoot;
@@ -1972,58 +1974,107 @@ export class ClimateFlowCard extends HTMLElementBase {
   }
   _scheduleDialogStyle() {
     return `<style>
-      dialog{color:var(--primary-text-color);background:var(--card-background-color,var(--ha-card-background));border:0;border-radius:24px;width:min(640px,calc(100vw - 40px));max-height:85vh;overflow:auto;padding:0;box-shadow:0 12px 40px rgba(0,0,0,.35)}
-      dialog::backdrop{background:rgba(0,0,0,.55);backdrop-filter:blur(3px)}
-      .dlg-head{display:flex;align-items:center;gap:12px;padding:18px 22px 14px;border-bottom:1px solid var(--divider-color);position:sticky;top:0;background:var(--card-background-color,var(--ha-card-background));z-index:1}
-      .dlg-head .dlg-icon{width:40px;height:40px;flex:0 0 40px;border-radius:50%;display:grid;place-items:center;background:var(--climate-flow-accent-color,var(--primary-color));color:var(--text-primary-color,#fff)}
-      .dlg-head .dlg-icon ha-icon{--mdc-icon-size:22px;display:block}
+      dialog{box-sizing:border-box;color:var(--primary-text-color);font:inherit;background:linear-gradient(145deg,color-mix(in srgb,var(--climate-flow-accent-color,var(--primary-color)) 4%,var(--card-background-color,var(--ha-card-background))),var(--card-background-color,var(--ha-card-background)) 42%);border:1px solid color-mix(in srgb,var(--divider-color) 82%,transparent);border-radius:26px;width:min(760px,calc(100vw - 32px));max-height:88vh;overflow:auto;padding:0;box-shadow:0 24px 72px rgba(0,0,0,.42);scrollbar-width:thin}
+      dialog::backdrop{background:rgba(0,0,0,.58);backdrop-filter:blur(5px)}
+      .dlg-head{display:flex;align-items:center;gap:13px;padding:20px 24px 16px;border-bottom:1px solid color-mix(in srgb,var(--divider-color) 82%,transparent);position:sticky;top:0;background:color-mix(in srgb,var(--card-background-color,var(--ha-card-background)) 94%,var(--climate-flow-accent-color,var(--primary-color)) 6%);backdrop-filter:blur(18px);z-index:3}
+      .dlg-head::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--climate-flow-accent-color,var(--primary-color)),color-mix(in srgb,var(--climate-flow-accent-color,var(--primary-color)) 20%,transparent) 72%,transparent)}
+      .dlg-head .dlg-icon{width:44px;height:44px;flex:0 0 44px;border-radius:15px;display:grid;place-items:center;background:linear-gradient(145deg,var(--climate-flow-accent-color,var(--primary-color)),color-mix(in srgb,var(--climate-flow-accent-color,var(--primary-color)) 72%,#000));color:var(--text-primary-color,#fff);box-shadow:0 5px 14px color-mix(in srgb,var(--climate-flow-accent-color,var(--primary-color)) 25%,transparent)}
+      .dlg-head .dlg-icon ha-icon{--mdc-icon-size:23px;display:block}
       .dlg-head .dlg-titles{flex:1 1 auto;min-width:0}
-      .dlg-head h2{margin:0;font-size:17px;font-weight:600}
-      .dlg-head .dlg-sub{font-size:12px;color:var(--secondary-text-color);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-      .dlg-head .close{flex:0 0 auto;display:grid;place-items:center;width:34px;height:34px;border-radius:50%;border:0;background:var(--secondary-background-color);color:var(--primary-text-color);cursor:pointer}
-       .dlg-head .close ha-icon{--mdc-icon-size:18px;display:block}
-      .dlg-body{padding:16px 22px 20px}
-      .statusline{display:flex;align-items:center;gap:8px;padding:10px 14px;border-radius:14px;background:var(--secondary-background-color);font-size:13px;color:var(--secondary-text-color);margin-bottom:14px}
-      .statusline .chip{font-weight:600;color:var(--primary-text-color)}
-      .error{color:var(--error-color);font-size:13px;margin:8px 0}
-      .switch{display:inline-flex;align-items:center;gap:10px;font-size:14px;font-weight:600;cursor:pointer;user-select:none;margin-bottom:14px}
-      .switch input{appearance:none;width:42px;height:24px;border-radius:999px;background:var(--divider-color);position:relative;cursor:pointer;transition:background .2s;margin:0}
-      .switch input::after{content:'';position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:var(--text-primary-color,#fff);transition:transform .2s}
+      .dlg-head h2{margin:0;font-size:20px;font-weight:700;letter-spacing:-.025em;line-height:1.2}
+      .dlg-head .dlg-sub{display:inline-block;max-width:100%;margin-top:4px;font-size:12px;font-weight:500;color:var(--secondary-text-color);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+      .dlg-head .close{flex:0 0 auto;display:grid;place-items:center;width:40px;height:40px;border-radius:13px;border:1px solid color-mix(in srgb,var(--divider-color) 80%,transparent);background:var(--secondary-background-color);color:var(--secondary-text-color);cursor:pointer;transition:background-color .16s,color .16s,border-color .16s}
+      .dlg-head .close:hover{background:color-mix(in srgb,var(--climate-flow-accent-color,var(--primary-color)) 10%,var(--secondary-background-color));border-color:color-mix(in srgb,var(--climate-flow-accent-color,var(--primary-color)) 32%,var(--divider-color));color:var(--primary-text-color)}
+      .dlg-head .close ha-icon{--mdc-icon-size:19px;display:block}
+      .dlg-head .close:focus-visible{outline:2px solid var(--climate-flow-accent-color,var(--primary-color));outline-offset:2px}
+      .dlg-body{display:flex;flex-direction:column;gap:14px;padding:18px 24px 22px}
+      .statusline{display:flex;align-items:center;flex-wrap:wrap;gap:8px 10px;min-height:48px;padding:10px 14px;border:1px solid color-mix(in srgb,var(--climate-flow-accent-color,var(--primary-color)) 18%,var(--divider-color));border-radius:16px;background:linear-gradient(110deg,color-mix(in srgb,var(--climate-flow-accent-color,var(--primary-color)) 8%,var(--secondary-background-color)),var(--secondary-background-color) 72%);font-size:12px;color:var(--secondary-text-color);margin:0}
+      .statusline>span:first-child{font-weight:600}
+      .statusline>span:not(:first-child){display:inline-flex;align-items:center;min-height:27px;padding:4px 9px;border:1px solid color-mix(in srgb,var(--divider-color) 75%,transparent);border-radius:999px;background:var(--card-background-color,var(--ha-card-background));color:var(--primary-text-color);font-size:11px;font-weight:600}
+      .statusline .chip{margin-left:auto}
+      .error{color:var(--error-color);font-size:13px;line-height:1.45;margin:0;padding:10px 12px;border:1px solid color-mix(in srgb,var(--error-color) 28%,transparent);border-radius:12px;background:color-mix(in srgb,var(--error-color) 7%,var(--card-background-color,var(--ha-card-background)))}
+      .error:empty{display:none}
+      .program-settings{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px}
+      .program-settings>.switch{grid-column:1/-1}
+      .switch{display:flex;align-items:center;gap:12px;min-height:52px;padding:10px 14px;border:1px solid color-mix(in srgb,var(--divider-color) 82%,transparent);border-radius:15px;background:var(--secondary-background-color);font-size:14px;font-weight:650;cursor:pointer;user-select:none;margin:0;transition:border-color .16s,background-color .16s}
+      .switch:hover{border-color:color-mix(in srgb,var(--climate-flow-accent-color,var(--primary-color)) 32%,var(--divider-color))}
+      .switch input{appearance:none;width:44px;height:26px;flex:0 0 44px;border-radius:999px;background:var(--divider-color);position:relative;cursor:pointer;transition:background .2s;margin:0}
+      .switch input::after{content:'';position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:var(--text-primary-color,#fff);box-shadow:0 1px 3px rgba(0,0,0,.25);transition:transform .2s}
       .switch input:checked{background:var(--climate-flow-accent-color,var(--primary-color))}
       .switch input:checked::after{transform:translateX(18px)}
-      .switch input:focus-visible{outline:2px solid var(--primary-color);outline-offset:2px}
-      .slot{border:1px solid var(--divider-color);border-radius:16px;padding:14px;margin:0 0 12px;background:var(--secondary-background-color)}
-      .slot .slot-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
-      .slot h3{margin:0;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--secondary-text-color)}
-      .slot .remove{border:0;background:transparent;color:var(--error-color);font:inherit;font-size:13px;font-weight:600;cursor:pointer;padding:5px 9px;border-radius:999px}
-      .days{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:10px}
+      .switch input:focus-visible{outline:2px solid var(--climate-flow-accent-color,var(--primary-color));outline-offset:3px}
+      .field.mode{min-width:0;margin:0;padding:13px;border:1px solid color-mix(in srgb,var(--divider-color) 82%,transparent);border-radius:15px;background:var(--secondary-background-color)}
+      .field.mode.hvac{display:block}
+      .field.hvac>label{display:grid;gap:8px;width:100%;font-size:10px;font-weight:700;letter-spacing:.075em;text-transform:uppercase;color:var(--secondary-text-color)}
+      .field.hvac .field-caption{font-size:10px;font-weight:700;letter-spacing:.075em;text-transform:uppercase;color:var(--secondary-text-color)}
+      .field.hvac select{width:100%;min-height:42px;padding:8px 11px;border-radius:11px;background:var(--card-background-color,var(--ha-card-background));font-size:13px;font-weight:600}
+      .field.outside{min-width:0;margin:0}
+      .slot{position:relative;overflow:hidden;border:1px solid color-mix(in srgb,var(--climate-flow-accent-color,var(--primary-color)) 17%,var(--divider-color));border-radius:18px;padding:16px;margin:0;background:linear-gradient(145deg,color-mix(in srgb,var(--climate-flow-accent-color,var(--primary-color)) 3%,var(--secondary-background-color)),var(--secondary-background-color) 58%);box-shadow:0 5px 16px rgba(0,0,0,.08);transition:border-color .18s,box-shadow .18s}
+      .slot::before{content:'';position:absolute;top:0;left:16px;right:16px;height:1px;background:linear-gradient(90deg,color-mix(in srgb,var(--climate-flow-accent-color,var(--primary-color)) 54%,transparent),transparent)}
+      .slot:hover{border-color:color-mix(in srgb,var(--climate-flow-accent-color,var(--primary-color)) 34%,var(--divider-color));box-shadow:0 8px 22px rgba(0,0,0,.12)}
+      .slot .slot-head{display:flex;align-items:center;gap:8px;margin-bottom:13px}
+      .slot h3{flex:1 1 auto;min-width:0;margin:0;font-size:11px;font-weight:750;text-transform:uppercase;letter-spacing:.08em;color:var(--climate-flow-accent-color,var(--primary-color))}
+      .slot .remove{flex:0 0 auto;min-height:34px;border:1px solid color-mix(in srgb,var(--error-color) 20%,transparent);background:color-mix(in srgb,var(--error-color) 7%,var(--secondary-background-color));color:var(--error-color);font:inherit;font-size:12px;font-weight:650;cursor:pointer;padding:5px 10px;border-radius:999px;transition:background-color .16s,border-color .16s}
+      .slot .remove:hover{background:color-mix(in srgb,var(--error-color) 14%,var(--secondary-background-color));border-color:color-mix(in srgb,var(--error-color) 38%,transparent)}
+      .days{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 13px}
       .days label{position:relative;cursor:pointer}
       .days input{position:absolute;opacity:0;width:1px;height:1px;margin:0;inset:auto}
-      .days .day{display:grid;place-items:center;min-width:38px;height:32px;padding:0 6px;border-radius:999px;background:var(--card-background-color,var(--ha-card-background));font-size:12px;font-weight:600;color:var(--secondary-text-color);transition:background .15s,color .15s}
-      .days input:checked ~ .day{background:var(--climate-flow-accent-color,var(--primary-color));color:var(--text-primary-color,#fff)}
-      .days input:focus-visible ~ .day{outline:2px solid var(--primary-color);outline-offset:2px}
-      .slot .range-toggle{position:relative;cursor:pointer;display:flex;align-items:center}
+      .days .day{display:grid;place-items:center;min-width:38px;height:34px;padding:0 7px;border:1px solid color-mix(in srgb,var(--divider-color) 82%,transparent);border-radius:999px;background:var(--card-background-color,var(--ha-card-background));font-size:11px;font-weight:650;color:var(--secondary-text-color);transition:background .15s,color .15s,border-color .15s,box-shadow .15s}
+      .days input:checked~.day{background:color-mix(in srgb,var(--climate-flow-accent-color,var(--primary-color)) 15%,var(--card-background-color,var(--ha-card-background)));border-color:color-mix(in srgb,var(--climate-flow-accent-color,var(--primary-color)) 34%,var(--divider-color));color:var(--climate-flow-accent-color,var(--primary-color));box-shadow:inset 0 1px 0 color-mix(in srgb,var(--text-primary-color,#fff) 10%,transparent)}
+      .days label:hover .day{border-color:color-mix(in srgb,var(--climate-flow-accent-color,var(--primary-color)) 46%,var(--divider-color));color:var(--climate-flow-accent-color,var(--primary-color))}
+      .days input:focus-visible~.day{outline:2px solid var(--climate-flow-accent-color,var(--primary-color));outline-offset:2px}
+      .slot .range-toggle{position:relative;flex:0 0 auto;cursor:pointer;display:flex;align-items:center}
       .slot .range-toggle input{position:absolute;opacity:0;width:1px;height:1px;margin:0;inset:auto}
-      .slot .range-toggle .day{display:grid;place-items:center;height:32px;padding:0 10px;border-radius:999px;background:var(--card-background-color,var(--ha-card-background));border:1px solid var(--divider-color);font-size:12px;font-weight:600;color:var(--secondary-text-color);transition:background .15s,color .15s}
-      .slot .range-toggle input:checked ~ .day{background:var(--climate-flow-accent-color,var(--primary-color));color:var(--text-primary-color,#fff);border-color:transparent}
-      .slot .range-toggle input:focus-visible ~ .day{outline:2px solid var(--primary-color);outline-offset:2px}
+      .slot .range-toggle .day{display:grid;place-items:center;height:32px;padding:0 11px;border-radius:999px;background:var(--card-background-color,var(--ha-card-background));border:1px solid color-mix(in srgb,var(--divider-color) 82%,transparent);font-size:11px;font-weight:650;color:var(--secondary-text-color);transition:background .15s,color .15s,border-color .15s,box-shadow .15s}
+      .slot .range-toggle input:checked~.day{background:color-mix(in srgb,var(--climate-flow-accent-color,var(--primary-color)) 15%,var(--card-background-color,var(--ha-card-background)));color:var(--climate-flow-accent-color,var(--primary-color));border-color:color-mix(in srgb,var(--climate-flow-accent-color,var(--primary-color)) 34%,var(--divider-color))}
+      .slot .range-toggle:hover .day{border-color:color-mix(in srgb,var(--climate-flow-accent-color,var(--primary-color)) 46%,var(--divider-color))}
+      .slot .range-toggle input:focus-visible~.day{outline:2px solid var(--climate-flow-accent-color,var(--primary-color));outline-offset:2px}
       .field{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
       .field label{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--secondary-text-color)}
-      .field input{font:inherit;font-size:14px;color:var(--primary-text-color);background:var(--card-background-color,var(--ha-card-background));border:1px solid var(--divider-color);border-radius:10px;padding:7px 10px}
-      .field input:focus-visible{outline:2px solid var(--primary-color);outline-offset:1px;border-color:transparent}
-      .field select{font:inherit;font-size:14px;color:var(--primary-text-color);background:var(--card-background-color,var(--ha-card-background));border:1px solid var(--divider-color);border-radius:10px;padding:7px 10px}
-      .field select:focus-visible{outline:2px solid var(--primary-color);outline-offset:1px;border-color:transparent}
-      .field.mode{margin:0 0 14px}
-      .field.outside{margin:0 0 14px}
-      .field.outside label{color:var(--primary-text-color);font-weight:600}
-      .dlg-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
-      .btn{font:inherit;font-size:14px;font-weight:600;color:var(--primary-text-color);background:var(--secondary-background-color);border:0;border-radius:999px;padding:9px 16px;cursor:pointer;white-space:nowrap}
-       .btn:focus-visible{outline:2px solid var(--primary-color);outline-offset:2px}
-       .btn.primary{background:var(--climate-flow-accent-color,var(--primary-color));color:var(--text-primary-color,#fff)}
-       .btn.danger{color:var(--error-color)}
-       .btn.ghost{background:transparent}
+      .field input{box-sizing:border-box;font:inherit;font-size:14px;color:var(--primary-text-color);background:var(--card-background-color,var(--ha-card-background));border:1px solid color-mix(in srgb,var(--divider-color) 82%,transparent);border-radius:11px;padding:8px 10px;transition:border-color .16s,box-shadow .16s}
+      .field input:focus-visible{outline:2px solid var(--climate-flow-accent-color,var(--primary-color));outline-offset:2px;border-color:transparent}
+      .field .temperature-field{box-sizing:border-box;display:flex;flex:1 1 136px;flex-direction:column;align-items:stretch;gap:7px;min-width:132px;max-width:190px;padding:10px 12px;border:1px solid color-mix(in srgb,var(--climate-flow-accent-color,var(--primary-color)) 24%,var(--divider-color));border-radius:14px;background:linear-gradient(145deg,color-mix(in srgb,var(--climate-flow-accent-color,var(--primary-color)) 7%,var(--secondary-background-color)),var(--secondary-background-color));box-shadow:inset 0 1px 0 color-mix(in srgb,var(--text-primary-color,#fff) 10%,transparent),0 2px 7px rgba(0,0,0,.08);color:var(--primary-text-color);transition:border-color .16s,box-shadow .16s}
+      .temperature-caption{font-size:10px;font-weight:700;letter-spacing:.075em;text-transform:uppercase;color:var(--secondary-text-color);line-height:1.2}
+      .temperature-value{box-sizing:border-box;display:flex;align-items:center;justify-content:flex-end;gap:7px;min-width:0;min-height:38px;padding:0 10px;border:1px solid color-mix(in srgb,var(--divider-color) 78%,transparent);border-radius:10px;background:var(--card-background-color,var(--ha-card-background));box-shadow:inset 0 1px 2px rgba(0,0,0,.08);transition:border-color .16s,box-shadow .16s,background-color .16s}
+      .temperature-value:focus-within{border-color:var(--climate-flow-accent-color,var(--primary-color));background:color-mix(in srgb,var(--climate-flow-accent-color,var(--primary-color)) 4%,var(--card-background-color,var(--ha-card-background)));box-shadow:0 0 0 3px color-mix(in srgb,var(--climate-flow-accent-color,var(--primary-color)) 16%,transparent),inset 0 1px 2px rgba(0,0,0,.06)}
+      .field .temperature-value input{flex:1 1 auto;width:100%;min-width:0;padding:7px 0;border:0;border-radius:0;background:transparent;box-shadow:none;text-align:right;font-size:17px;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+      .field .temperature-value input:focus-visible{outline:none;border-color:transparent}
+      .temperature-unit{flex:0 0 auto;color:var(--secondary-text-color);font-size:12px;font-weight:700;white-space:nowrap}
+      .field.outside .temperature-field{flex:1 1 100%;flex-direction:row;align-items:center;justify-content:space-between;width:100%;max-width:none;gap:14px;padding:11px 14px}
+      .field.outside .temperature-value{flex:0 1 170px;width:170px}
+      .slot .field{gap:12px}
+      .slot .field>label:not(.temperature-field){flex:1 1 130px;min-width:120px;display:flex;flex-direction:column;align-items:flex-start;gap:6px;font-size:10px;font-weight:700;letter-spacing:.075em;text-transform:uppercase}
+      .slot .field>label:not(.temperature-field) input{width:100%;min-height:42px;font-size:13px;font-variant-numeric:tabular-nums}
+      .field select{box-sizing:border-box;font:inherit;font-size:14px;color:var(--primary-text-color);background:var(--card-background-color,var(--ha-card-background));border:1px solid color-mix(in srgb,var(--divider-color) 82%,transparent);border-radius:11px;padding:8px 10px;transition:border-color .16s,box-shadow .16s}
+      .field select:focus-visible{outline:2px solid var(--climate-flow-accent-color,var(--primary-color));outline-offset:2px;border-color:transparent}
+      .field.outside label.temperature-field{color:var(--primary-text-color);font-weight:600}
+      .dlg-actions{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-top:2px;padding-top:14px;border-top:1px solid color-mix(in srgb,var(--divider-color) 82%,transparent)}
+      .btn{min-height:42px;font:inherit;font-size:13px;font-weight:650;color:var(--primary-text-color);background:var(--secondary-background-color);border:1px solid color-mix(in srgb,var(--divider-color) 82%,transparent);border-radius:12px;padding:9px 15px;cursor:pointer;white-space:nowrap;transition:background-color .16s,border-color .16s,box-shadow .16s,transform .16s}
+      .btn:hover{border-color:color-mix(in srgb,var(--climate-flow-accent-color,var(--primary-color)) 36%,var(--divider-color))}
+      .btn:focus-visible{outline:2px solid var(--climate-flow-accent-color,var(--primary-color));outline-offset:2px}
+      .btn.primary{margin-left:auto;background:var(--climate-flow-accent-color,var(--primary-color));border-color:transparent;color:var(--text-primary-color,#fff);box-shadow:0 5px 14px color-mix(in srgb,var(--climate-flow-accent-color,var(--primary-color)) 24%,transparent)}
+      .btn.primary:hover{box-shadow:0 7px 18px color-mix(in srgb,var(--climate-flow-accent-color,var(--primary-color)) 34%,transparent)}
+      .btn.danger{color:var(--error-color);background:color-mix(in srgb,var(--error-color) 6%,var(--secondary-background-color));border-color:color-mix(in srgb,var(--error-color) 18%,transparent)}
+      .btn.ghost{width:100%;min-height:46px;background:color-mix(in srgb,var(--climate-flow-accent-color,var(--primary-color)) 5%,var(--secondary-background-color));border:1px dashed color-mix(in srgb,var(--climate-flow-accent-color,var(--primary-color)) 42%,var(--divider-color));color:var(--climate-flow-accent-color,var(--primary-color));font-size:13px}
+      .dlg-body>.btn.ghost{margin-top:-2px}
+      @media(max-width:680px){
+        dialog{width:calc(100vw - 16px);max-height:calc(100vh - 16px);border-radius:21px}
+        .dlg-head{gap:11px;padding:17px 16px 14px}
+        .dlg-head .dlg-icon{width:40px;height:40px;flex-basis:40px;border-radius:13px}
+        .dlg-head h2{font-size:18px}
+        .dlg-body{gap:12px;padding:14px 16px 18px}
+        .program-settings{grid-template-columns:minmax(0,1fr)}
+        .program-settings>.switch{grid-column:auto}
+        .slot{padding:14px}
+        .slot .slot-head{gap:6px}
+        .days{gap:5px}
+        .days .day{min-width:36px}
+        .dlg-actions{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px}
+        .dlg-actions .btn{min-width:0;padding:9px 8px;white-space:normal}
+      }
+      @media(prefers-reduced-motion:reduce){.dlg-head .close,.switch,.switch input,.switch input::after,.slot,.slot .remove,.days .day,.slot .range-toggle .day,.field input,.field select,.temperature-field,.temperature-value,.btn{transition:none!important}}
        ${BUTTON_FEEDBACK_CSS}
-     </style>`;
+      </style>`;
   }
   _renderScheduleDialog() {
     const t = this._strings();
@@ -2035,6 +2086,14 @@ export class ClimateFlowCard extends HTMLElementBase {
     dialog.querySelector('.dlg-sub').textContent = this.config.name || this.config.entity;
     const sensor = this._scheduleSensor(), program = sensor?.attributes?.programs?.[this.config.entity];
     const entity = this._hass?.states?.[this.config.entity];
+    const temperatureUnit = this._hass?.config?.unit_system?.temperature || '°C';
+    const makeTemperatureField = (label, input, labelText) => {
+      label.className = 'temperature-field';
+      const caption = document.createElement('span'); caption.className = 'temperature-caption'; caption.textContent = labelText;
+      const value = document.createElement('span'); value.className = 'temperature-value';
+      const unit = document.createElement('span'); unit.className = 'temperature-unit'; unit.setAttribute('aria-hidden', 'true'); unit.textContent = temperatureUnit;
+      value.append(input, unit); label.append(caption, value);
+    };
     if (!sensor) {
       const p = document.createElement('p'); p.className = 'error'; p.textContent = t.backendMissing; body.append(p);
       if (typeof this.config.schedule_entity === 'string' && /^schedule\.[\w-]+$/.test(this.config.schedule_entity)) { const link = document.createElement('button'); link.className = 'btn'; link.textContent = t.openLegacy; link.addEventListener('click', () => this.dispatchEvent(new CustomEvent('hass-more-info', { detail: { entityId: this.config.schedule_entity }, ['bub' + 'bles']: true, composed: true }))); body.append(link); }
@@ -2067,10 +2126,11 @@ export class ClimateFlowCard extends HTMLElementBase {
         });
         pauseBox.append(pausedLabel, resumePause);
       } else {
-        const pauseLabel = document.createElement('label'); pauseLabel.textContent = t.pause;
+        const pauseLabel = document.createElement('label');
         const pauseInput = document.createElement('input'); pauseInput.type = 'number'; pauseInput.step = 'any';
         pauseInput.setAttribute('aria-label', t.pauseTarget); pauseInput.title = t.pauseTarget;
         pauseInput.value = String(numeric(entity?.attributes?.temperature) ?? 16);
+        makeTemperatureField(pauseLabel, pauseInput, t.pause);
         const pauseDuration = document.createElement('select'); pauseDuration.setAttribute('aria-label', t.pauseDuration);
         for (const [value, label] of pauseDurationChoices(t)) { const option = document.createElement('option'); option.value = value; option.textContent = label; pauseDuration.append(option); }
         const startPause = document.createElement('button'); startPause.className = 'btn'; startPause.textContent = t.pauseStart;
@@ -2081,23 +2141,27 @@ export class ClimateFlowCard extends HTMLElementBase {
           try { await this._hass.callService('climate_flow_scheduler', 'set_pause', data); this._closeSchedule(dialog); }
           catch (err) { pauseError.textContent = errorLabel(t, err?.message || err); }
         });
-        pauseBox.append(pauseLabel, pauseInput, pauseDuration, startPause);
+        pauseBox.append(pauseLabel, pauseDuration, startPause);
       }
       if (pauseAvailable) body.append(pauseBox, pauseError);
-      const enabledLabel = document.createElement('label'), enabled = document.createElement('input'); enabled.type = 'checkbox'; enabled.checked = Boolean(this._scheduleDraft.enabled); enabledLabel.className = 'switch'; enabledLabel.append(enabled, document.createTextNode(t.enabled)); enabled.addEventListener('change', () => this._scheduleDraft.enabled = enabled.checked);      body.append(enabledLabel);
-      const modeField = document.createElement('div'); modeField.className = 'field mode';
-      const modeFieldLabel = document.createElement('label'); modeFieldLabel.textContent = t.hvacMode;
+       const enabledLabel = document.createElement('label'), enabled = document.createElement('input'); enabled.type = 'checkbox'; enabled.checked = Boolean(this._scheduleDraft.enabled); enabledLabel.className = 'switch'; enabledLabel.append(enabled, document.createTextNode(t.enabled)); enabled.addEventListener('change', () => this._scheduleDraft.enabled = enabled.checked);
+      const settings = document.createElement('div'); settings.className = 'program-settings';
+      const modeField = document.createElement('div'); modeField.className = 'field mode hvac';
+      const modeFieldLabel = document.createElement('label');
+      const modeCaption = document.createElement('span'); modeCaption.className = 'field-caption'; modeCaption.textContent = t.hvacMode;
       const modeSelect = document.createElement('select'); modeSelect.setAttribute('aria-label', t.hvacMode);
       const modeNone = document.createElement('option'); modeNone.value = ''; modeNone.textContent = t.dontChange; modeSelect.append(modeNone);
       for (const m of schedulableModes(entity)) { const option = document.createElement('option'); option.value = m; option.textContent = modeLabel(m, t); modeSelect.append(option); }
       modeSelect.value = this._scheduleDraft.hvacMode ?? '';
       modeSelect.addEventListener('change', () => { this._scheduleDraft.hvacMode = modeSelect.value || null; });
-      modeFieldLabel.append(modeSelect); modeField.append(modeFieldLabel); body.append(modeField);
+      modeFieldLabel.append(modeCaption, modeSelect); modeField.append(modeFieldLabel);
       const awayField = document.createElement('div'); awayField.className = 'field outside';
-      const awayLabel = document.createElement('label'); awayLabel.textContent = t.outsideSchedule;
+      const awayLabel = document.createElement('label');
       const awayInput = document.createElement('input'); awayInput.type = 'number'; awayInput.step = 'any'; awayInput.value = this._scheduleDraft.awayTemperature ?? ''; awayInput.setAttribute('aria-label', t.outsideScheduleAria); awayInput.title = t.outsideScheduleTitle;
+      makeTemperatureField(awayLabel, awayInput, t.outsideSchedule);
       awayInput.addEventListener('input', () => this._scheduleDraft.awayTemperature = awayInput.value);
-      awayLabel.append(awayInput); awayField.append(awayLabel); body.append(awayField);
+      awayField.append(awayLabel);
+      settings.append(enabledLabel, modeField, awayField); body.append(settings);
       const slots = document.createElement('div');
       // A range toggle only makes sense where heat_cool exists; an already
       // dual slot keeps it so the user can always go back to one temperature.
@@ -2146,9 +2210,11 @@ export class ClimateFlowCard extends HTMLElementBase {
         if (slot.range) entries.push(['targetTempLow', t.targetLowField, 'number'], ['targetTempHigh', t.targetHighField, 'number']);
         else entries.push(['temperature', t.targetField, 'number']);
         for (const [key, labelText, type] of entries) {
-          const label = document.createElement('label'); label.textContent = labelText;
+          const label = document.createElement('label');
           const input = document.createElement('input'); input.type = type; input.value = slot[key] === null || slot[key] === undefined ? '' : String(slot[key]); if (type === 'number') input.step = 'any'; input.setAttribute('aria-label', labelText); input.addEventListener('input', () => slot[key] = input.value);
-          label.append(input); field.append(label);
+          if (type === 'number') makeTemperatureField(label, input, labelText);
+          else { label.textContent = labelText; label.append(input); }
+          field.append(label);
         }
         box.append(field); slots.append(box);
       })}; renderSlots(); body.append(slots);

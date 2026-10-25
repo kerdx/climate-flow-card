@@ -179,6 +179,16 @@ test('circular dial renders the heat_cool pair as two thumbs on one arc', () => 
   card.disconnectedCallback?.();
 });
 
+test('step controls keep their signed step and accessible names in every layout', () => {
+  for (const layout of ['pill', 'compact', 'circular']) {
+    const { card, shadow } = build({ config: { layout } });
+    const buttons = [...shadow.querySelectorAll('[data-delta]')];
+    assert.deepEqual(buttons.map((button) => button.dataset.delta), ['-0.5', '0.5'], `${layout} keeps the configured step`);
+    assert.deepEqual(buttons.map((button) => button.getAttribute('aria-label')), ['Decrease target temperature', 'Increase target temperature']);
+    card.disconnectedCallback?.();
+  }
+});
+
 // --------------------------------------------------------------------------
 // Circular dial: dragging
 // --------------------------------------------------------------------------
@@ -453,6 +463,15 @@ test('schedule dialog opens a single slot with one temperature and a range switc
   const fields = slotFields(dialog);
   assert.equal(fields.length, 3, 'start, end and one temperature');
   assert.equal(fields[2].value, '21');
+  assert.ok(fields[2].closest('.temperature-field'), 'the target uses the premium temperature field');
+  assert.equal(fields[2].closest('.temperature-value').querySelector('.temperature-unit').textContent, '°C');
+  assert.equal(fields[2].closest('.temperature-value').querySelector('.temperature-unit').getAttribute('aria-hidden'), 'true');
+  const awayInput = dialog.querySelector('.field.outside .temperature-value input');
+  assert.ok(awayInput, 'the outside-schedule target uses the same field treatment');
+  assert.equal(awayInput.getAttribute('aria-label'), 'Outside schedule temperature');
+  assert.equal(dialog.querySelector('.program-settings .switch input[type="checkbox"]').checked, true);
+  assert.ok(dialog.querySelector('.program-settings .field.hvac select[aria-label="HVAC mode"]'));
+  assert.ok(dialog.querySelector('.slot .slot-head h3'));
   assert.ok(!fields.some((input) => input.getAttribute('aria-label') === 'Low temperature'));
   card.disconnectedCallback?.();
 });
@@ -633,6 +652,10 @@ test('buttons have theme-aware hover and pressed feedback in cards, editor and d
   const scheduleCss = editorDialog(scheduled.shadow).querySelector('style').textContent;
   assert.ok(scheduleCss.includes(hoverTint), 'schedule buttons and day pills respond to hover');
   assert.ok(scheduleCss.includes('.days label:active .day'), 'schedule day pills respond while pressed');
+  assert.ok(scheduleCss.includes('.program-settings{display:grid'), 'program controls have a clear responsive settings group');
+  assert.ok(scheduleCss.includes('.slot::before'), 'time slots receive a subtle accent detail');
+  assert.ok(scheduleCss.includes('prefers-reduced-motion:reduce'), 'the polish respects reduced-motion preferences');
+  assert.ok(scheduleCss.includes('var(--climate-flow-accent-color,var(--primary-color))'), 'the dialog follows the card and HA theme accent');
   scheduled.card.disconnectedCallback?.();
 
   const override = build();

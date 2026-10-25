@@ -23,6 +23,17 @@ test('pill status and temperatures preserve readable separators and spacing', ()
   assert.match(source, /\.meta\{flex:1 1 0;min-width:0/);
 });
 
+test('temperature inputs and +/- controls use polished theme-aware styling', () => {
+  const source = readFileSync(new URL('./custom_components/climate_flow_scheduler/www/climate-flow-card.js', import.meta.url), 'utf8');
+  assert.match(source, /\.field \.temperature-field\{[^}]*linear-gradient/s);
+  assert.match(source, /\.temperature-value:focus-within\{[^}]*box-shadow/s);
+  assert.match(source, /\.field \.temperature-value input\{[^}]*font-variant-numeric:tabular-nums/s);
+  assert.match(source, /\.controls button\[data-delta\]\{[^}]*font-weight:700/s);
+  assert.match(source, /\.body button\[data-delta\]\{[^}]*font-weight:700/s);
+  assert.match(source, /\.row button\[data-delta\]\{[^}]*font-weight:700/s);
+  assert.match(source, /unit\.setAttribute\('aria-hidden', 'true'\)/);
+});
+
 test('editor schema groups the options into localized sections', () => {
   assert.deepEqual(configSchema.map((entry) => entry.type), ['grid', 'grid', 'expandable']);
   assert.deepEqual(configSchema.map((entry) => entry.name), ['identity', 'chips', 'controls']);
