@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.7.5
+
+- Restore the pill card's original simple `− / +` controls and add subtle theme-aware hover and press feedback to the whole card surface.
+
 ## v1.7.4
 
 - Add themed, accessible `− / +` stepper buttons to temperature fields in the schedule editor. They follow the climate entity's step and limits, and preserve the minimum gap between heat_cool bounds.

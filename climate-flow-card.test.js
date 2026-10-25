@@ -30,7 +30,6 @@ test('temperature inputs and +/- controls use polished theme-aware styling', () 
   assert.match(source, /\.field \.temperature-value input\{[^}]*font-variant-numeric:tabular-nums/s);
   assert.match(source, /\.temperature-step\{[^}]*font-weight:700/s);
   assert.match(source, /adjustTemperatureInput\(input, -1, true/);
-  assert.match(source, /\.controls button\[data-delta\]\{[^}]*font-weight:700/s);
   assert.match(source, /\.body button\[data-delta\]\{[^}]*font-weight:700/s);
   assert.match(source, /\.row button\[data-delta\]\{[^}]*font-weight:700/s);
   assert.match(source, /unit\.setAttribute\('aria-hidden', 'true'\)/);
@@ -39,7 +38,11 @@ test('temperature inputs and +/- controls use polished theme-aware styling', () 
 test('the pill-card target keeps its original unboxed setpoint appearance', () => {
   const source = readFileSync(new URL('./custom_components/climate_flow_scheduler/www/climate-flow-card.js', import.meta.url), 'utf8');
   assert.match(source, /\.controls\{[^}]*gap:0;background:var\(--secondary-background-color\);border-radius:999px;padding:2px;/);
+  assert.match(source, /\.controls button\{[^}]*background:transparent;border:0;border-radius:999px;padding:7px 10px/);
   assert.match(source, /\.controls \.setpoint\{font-weight:600;min-width:58px;text-align:center;background:transparent;font-size:14px;padding:7px 2px\}/);
+  assert.doesNotMatch(source, /\.controls button\[data-delta\]\{[^}]*border:/);
+  assert.match(source, /\.controls button\[data-delta\]:not\(:disabled\):hover\{background:var\(--divider-color\);color:var\(--primary-text-color\);box-shadow:none\}/);
+  assert.match(source, /\.controls button\[data-delta\]\.step-feedback:not\(:disabled\),\.controls button\[data-delta\]:not\(:disabled\):active\{background:var\(--divider-color\);color:var\(--primary-text-color\);box-shadow:none;transform:scale\(\.96\)\}/);
 });
 
 test('editor schema groups the options into localized sections', () => {
