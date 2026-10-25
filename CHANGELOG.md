@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.7.6
+
+- Refine card hierarchy with a clearer setpoint, quieter current-temperature chip, subtle HVAC-state indicator and softer surface styling.
+- Add consistent theme-aware hover and press feedback across pill, compact and circular layouts while respecting reduced motion and the animation setting.
+- Update GitHub Actions to Node 24-compatible releases and pin Ubuntu 24.04 to avoid runtime and runner migration warnings.
+
 ## v1.7.5
 
 - Restore the pill card's original simple `− / +` controls and add subtle theme-aware hover and press feedback to the whole card surface.

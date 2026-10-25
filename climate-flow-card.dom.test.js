@@ -203,20 +203,40 @@ test('pill +/- controls show clear hover and post-click feedback while keeping t
   card.disconnectedCallback?.();
 });
 
-test('the whole pill card gets a subtle hover tint and press feedback', () => {
-  const { card, shadow } = build({ config: { layout: 'pill' } });
-  const css = shadow.querySelector('style').textContent;
-  assert.ok(css.includes('ha-card:not([data-surface="blend"]):hover'), 'hover tints the full default/elevated surface');
-  assert.ok(css.includes('ha-card[data-surface="blend"]:hover'), 'blend surface also gets a subtle hover tint');
-  assert.ok(css.includes('ha-card:not([data-surface="blend"]).pill-press-feedback'), 'press feedback applies to the whole card');
-  const before = shadow.querySelector('ha-card');
-  before.dispatchEvent(pointer('pointerdown', 0, 0));
-  assert.ok(before.classList.contains('pill-press-feedback'), 'press immediately tints the card surface');
-  card._render();
-  const after = shadow.querySelector('ha-card');
-  assert.notEqual(after, before, 'test exercises a full card rerender');
-  assert.ok(after.classList.contains('pill-press-feedback'), 'press feedback survives an immediate rerender');
-  card.disconnectedCallback?.();
+test('all layouts get subtle whole-card hover and press feedback', () => {
+  for (const layout of ['pill', 'compact', 'circular']) {
+    const { card, shadow } = build({ config: { layout } });
+    const css = shadow.querySelector('style').textContent;
+    assert.ok(css.includes('ha-card:not([data-surface="blend"]):hover'), `${layout} hover tints the full default/elevated surface`);
+    assert.ok(css.includes('ha-card[data-surface="blend"]:hover'), `${layout} blend surface also gets a subtle hover tint`);
+    assert.ok(css.includes('ha-card:not([data-surface="blend"]).card-press-feedback'), `${layout} press feedback applies to the whole card`);
+    assert.ok(css.includes('ha-card[data-motion="off"]{transition:none!important}'), `${layout} respects the animation toggle`);
+    const before = shadow.querySelector('ha-card');
+    before.dispatchEvent(pointer('pointerdown', 0, 0));
+    assert.ok(before.classList.contains('card-press-feedback'), `${layout} press immediately tints the card surface`);
+    card._render();
+    const after = shadow.querySelector('ha-card');
+    assert.notEqual(after, before, `${layout} test exercises a full card rerender`);
+    assert.ok(after.classList.contains('card-press-feedback'), `${layout} press feedback survives an immediate rerender`);
+    card.disconnectedCallback?.();
+  }
+});
+
+test('pill status indicator distinguishes active, idle and unavailable entities', () => {
+  const active = build({ config: { layout: 'pill' } });
+  const activeStatus = active.shadow.querySelector('.status');
+  assert.equal(activeStatus.dataset.climateState, 'active');
+  assert.equal(activeStatus.dataset.showStateIndicator, 'true');
+  active.card.disconnectedCallback?.();
+
+  const idle = build({ entity: climateEntity({ state: 'off' }), config: { layout: 'pill' } });
+  assert.equal(idle.shadow.querySelector('.status').dataset.climateState, 'idle');
+  idle.card.disconnectedCallback?.();
+
+  const unavailable = build({ entity: { ...climateEntity({ state: 'unavailable' }), attributes: {} }, config: { layout: 'pill' } });
+  assert.equal(unavailable.shadow.querySelector('.status').dataset.climateState, 'unavailable');
+  assert.equal(unavailable.shadow.querySelector('.status').dataset.showStateIndicator, 'true');
+  unavailable.card.disconnectedCallback?.();
 });
 
 // --------------------------------------------------------------------------

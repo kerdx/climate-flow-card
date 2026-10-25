@@ -1348,7 +1348,7 @@ export class ClimateFlowCard extends HTMLElementBase {
     this._scheduleRelativeRefresh();
   }
   connectedCallback() { this._scheduleRelativeRefresh(); }
-    disconnectedCallback() { clearTimeout(this._optimisticTimer); this._optimisticTimer = null; this._optimistic = null; clearTimeout(this._relativeTimer); this._relativeTimer = null; this._relativeRefreshKey = null; clearTimeout(this._pillStepFeedbackTimer); this._pillStepFeedbackTimer = null; this._pillStepFeedbackDelta = null; clearTimeout(this._pillCardFeedbackTimer); this._pillCardFeedbackTimer = null; this._pillCardPressFeedback = false; clearTimeout(this._tapTimer); this._tapTimer = null; clearTimeout(this._holdTimer); this._holdTimer = null; clearTimeout(this._commitTimer); this._commitTimer = null; this._holdFired = false; this._lastTapAt = 0; this._detachDialDrag(); this._detachHeroDrag(); this._dragConsumed = false; }
+    disconnectedCallback() { clearTimeout(this._optimisticTimer); this._optimisticTimer = null; this._optimistic = null; clearTimeout(this._relativeTimer); this._relativeTimer = null; this._relativeRefreshKey = null; clearTimeout(this._pillStepFeedbackTimer); this._pillStepFeedbackTimer = null; this._pillStepFeedbackDelta = null; clearTimeout(this._cardSurfaceFeedbackTimer); this._cardSurfaceFeedbackTimer = null; this._cardPressFeedback = false; clearTimeout(this._tapTimer); this._tapTimer = null; clearTimeout(this._holdTimer); this._holdTimer = null; clearTimeout(this._commitTimer); this._commitTimer = null; this._holdFired = false; this._lastTapAt = 0; this._detachDialDrag(); this._detachHeroDrag(); this._dragConsumed = false; }
   getCardSize() { const layout = this.config?.layout; return layout === 'circular' ? 3 : layout === 'compact' ? 2 : 1; }
   _service(domain, service, data) {
     if (!this._hass) return Promise.resolve();
@@ -1520,7 +1520,7 @@ export class ClimateFlowCard extends HTMLElementBase {
     const picture = c.show_entity_picture ? String(c.entity_picture || a.entity_picture || '') : '';
     this.shadowRoot.innerHTML = `<style>
       :host{display:block;color:var(--primary-text-color);font-family:var(--paper-font-body1_-_font-family,inherit)}
-       ha-card{--climate-flow-pill-background:var(--ha-card-background,var(--card-background-color));border:1px solid var(--divider-color);border-radius:var(--climate-flow-border-radius,18px);background:var(--climate-flow-pill-background);padding:8px 10px;box-sizing:border-box;min-height:64px;display:block;overflow:hidden;cursor:pointer;transition:background-color .16s ease}ha-card:focus-visible{outline:2px solid var(--primary-color);outline-offset:2px}
+       ha-card{--cf-accent:var(--climate-flow-accent-color,var(--primary-color));--climate-flow-pill-background:var(--ha-card-background,var(--card-background-color));border:1px solid color-mix(in srgb,var(--divider-color) 82%,transparent);border-radius:var(--climate-flow-border-radius,18px);background:var(--climate-flow-pill-background);padding:8px 10px;box-sizing:border-box;min-height:64px;display:block;overflow:hidden;cursor:pointer;box-shadow:0 4px 14px -12px rgba(0,0,0,.55);transition:background-color .16s ease}ha-card:focus-visible{outline:2px solid var(--cf-accent);outline-offset:2px}
        ha-card[data-surface="elevated"]{--climate-flow-pill-background:color-mix(in srgb,var(--ha-card-background,var(--card-background-color)) 84%,var(--text-primary-color) 16%);background:var(--climate-flow-pill-background);border-color:color-mix(in srgb,var(--divider-color) 45%,transparent);box-shadow:0 18px 38px -26px rgba(0,0,0,.95)}
        ha-card[data-surface="blend"]{--climate-flow-pill-background:transparent;background:var(--climate-flow-pill-background);border-color:transparent;box-shadow:none}
        .pill{display:flex;align-items:center;gap:10px;min-width:0}
@@ -1529,13 +1529,16 @@ export class ClimateFlowCard extends HTMLElementBase {
       .icon ha-icon{--mdc-icon-size:22px}
       .icon img{width:100%;height:100%;object-fit:cover;border-radius:50%}.icon ha-icon[hidden]{display:none}
       .meta{flex:1 1 0;min-width:0;display:flex;flex-direction:column;gap:2px;overflow:hidden}
-      .title{font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-       .status{font-size:12px;color:var(--secondary-text-color);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+       .title{font-size:15px;line-height:1.2;font-weight:600;letter-spacing:-.01em;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+        .status{font-size:12px;line-height:1.25;color:var(--secondary-text-color);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+        .status[data-show-state-indicator="true"]::before{content:'';display:inline-block;width:6px;height:6px;margin:0 6px 1px 1px;border-radius:50%;background:var(--secondary-text-color);vertical-align:middle}
+        .status[data-climate-state="active"][data-show-state-indicator="true"]::before{background:var(--cf-accent);box-shadow:0 0 0 2px color-mix(in srgb,var(--cf-accent) 15%,transparent)}
+        .status[data-climate-state="unavailable"]{color:var(--error-color)}.status[data-climate-state="unavailable"]::before{background:var(--error-color)}
        .status-line{display:flex;min-width:0;gap:0;white-space:nowrap;overflow:hidden}
        .status-line span{min-width:0;overflow:hidden;text-overflow:ellipsis}
        .status-line span+span:before{content:' · ';white-space:pre;color:var(--secondary-text-color)}
        .status-line .relative{flex:0 0 auto;overflow:visible}.override-badge{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--primary-color);font-weight:600}
-      .current{flex:0 0 auto;display:inline-flex;align-items:center;gap:5px;font-size:13px;font-weight:600;padding:9px 13px;border-radius:999px;background:var(--secondary-background-color);color:var(--primary-text-color);white-space:nowrap}
+       .current{flex:0 0 auto;display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:600;padding:8px 11px;border-radius:999px;background:var(--secondary-background-color);color:var(--primary-text-color);white-space:nowrap;font-variant-numeric:tabular-nums}
       .current[data-active="true"]{background:var(--climate-flow-accent-color,var(--primary-color));color:var(--text-primary-color,#fff)}
       .current ha-icon{--mdc-icon-size:15px;display:block;color:currentColor;opacity:.85}
       .current span{white-space:nowrap}
@@ -1544,7 +1547,7 @@ export class ClimateFlowCard extends HTMLElementBase {
        .controls button{font:inherit;font-size:14px;color:var(--primary-text-color);background:transparent;border:0;border-radius:999px;padding:7px 10px;cursor:pointer;white-space:nowrap;flex:0 0 auto}
        .controls button:focus-visible{outline:2px solid var(--primary-color);outline-offset:2px}
       .controls button:disabled{opacity:.45;cursor:default;background:var(--secondary-background-color)}
-       .controls .setpoint{font-weight:600;min-width:58px;text-align:center;background:transparent;font-size:14px;padding:7px 2px}
+        .controls .setpoint{font-weight:700;min-width:58px;text-align:center;background:transparent;font-size:15px;padding:7px 2px;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
        .controls select{font:inherit;font-size:13px;color:var(--primary-text-color);background:transparent;border:0;border-radius:999px;padding:7px 5px;cursor:pointer;min-width:54px;max-width:96px;overflow:hidden;text-overflow:ellipsis}
         .controls select:focus-visible{outline:2px solid var(--primary-color);outline-offset:0}
        .controls .setpoint:focus-visible{outline-offset:0;border-radius:10px}
@@ -1556,23 +1559,22 @@ export class ClimateFlowCard extends HTMLElementBase {
        .schedule{display:grid;place-items:center;flex:0 0 auto;padding:8px 11px;font:inherit;color:var(--primary-text-color);background:var(--secondary-background-color);border:0;border-radius:999px;cursor:pointer}
        .schedule[data-active="true"]{background:var(--climate-flow-accent-color,var(--primary-color));color:var(--text-primary-color,#fff)}
        .schedule:focus-visible{outline:2px solid var(--primary-color);outline-offset:2px}.schedule ha-icon{--mdc-icon-size:18px;display:block}
-         @media(max-width:420px){ha-card{padding:7px 8px}.pill{gap:7px}.icon{width:34px;height:34px;flex-basis:34px}.icon ha-icon{--mdc-icon-size:19px}.current{font-size:12px;padding:6px 8px}.controls button{padding:6px 7px;font-size:13px}.controls .setpoint{min-width:48px}.schedule{padding:6px 8px}}
+          @media(max-width:420px){ha-card{padding:7px 8px}.pill{gap:7px}.icon{width:34px;height:34px;flex-basis:34px}.icon ha-icon{--mdc-icon-size:19px}.title{font-size:14px}.current{font-size:11px;padding:6px 8px}.controls button{padding:6px 7px;font-size:13px}.controls .setpoint{min-width:48px;font-size:14px}.schedule{padding:6px 8px}}
         ${BUTTON_FEEDBACK_CSS}
         .controls button[data-delta]{transition:background-color .12s ease,transform .12s ease}
          @media (hover:hover) and (pointer:fine){.controls button[data-delta]:not(:disabled):hover{background:var(--divider-color);color:var(--primary-text-color);box-shadow:none}}
          .controls button[data-delta].step-feedback:not(:disabled),.controls button[data-delta]:not(:disabled):active{background:var(--divider-color);color:var(--primary-text-color);box-shadow:none;transform:scale(.96)}
          @media(prefers-reduced-motion:reduce){.controls button[data-delta]{transition:none!important}}
-         @media (hover:hover) and (pointer:fine){ha-card:not([data-surface="blend"]):hover{background-color:color-mix(in srgb,var(--climate-flow-accent-color,var(--primary-color)) 5%,var(--climate-flow-pill-background))}ha-card[data-surface="blend"]:hover{background-color:color-mix(in srgb,var(--climate-flow-accent-color,var(--primary-color)) 5%,transparent)}}
-         ha-card:not([data-surface="blend"]).pill-press-feedback{background-color:color-mix(in srgb,var(--climate-flow-accent-color,var(--primary-color)) 9%,var(--climate-flow-pill-background))}
-         ha-card[data-surface="blend"].pill-press-feedback{background-color:color-mix(in srgb,var(--climate-flow-accent-color,var(--primary-color)) 9%,transparent)}
+          @media (hover:hover) and (pointer:fine){ha-card:not([data-surface="blend"]):hover{background-color:color-mix(in srgb,var(--cf-accent) 5%,var(--climate-flow-pill-background))}ha-card[data-surface="blend"]:hover{background-color:color-mix(in srgb,var(--cf-accent) 5%,transparent)}}
+          ha-card:not([data-surface="blend"]).card-press-feedback{background-color:color-mix(in srgb,var(--cf-accent) 9%,var(--climate-flow-pill-background))}
+          ha-card[data-surface="blend"].card-press-feedback{background-color:color-mix(in srgb,var(--cf-accent) 9%,transparent)}
          @media(prefers-reduced-motion:reduce){ha-card{transition:none!important}}
+         ha-card[data-motion="off"]{transition:none!important}
        </style><ha-card tabindex="0" role="group" aria-label="Tap card background to toggle heating"><div class="pill"><span class="icon"><ha-icon></ha-icon></span><div class="meta"><span class="title"></span><span class="status"></span></div><span class="current"><ha-icon></ha-icon><span></span></span><div class="controls"></div><button class="schedule" aria-label="Open schedule details" title="Open schedule details"><ha-icon icon="mdi:calendar-clock"></ha-icon></button></div></ha-card>`;
     const root = this.shadowRoot;
     const pillCard = root.querySelector('ha-card');
     this._bindCardToggle(pillCard);
-    if (this._pillCardPressFeedback) pillCard.classList.add('pill-press-feedback');
-    pillCard.addEventListener('pointerdown', () => this._flashPillCardFeedback(), { passive: true });
-    pillCard.addEventListener('click', () => this._flashPillCardFeedback(), true);
+    this._bindCardSurfaceFeedback(pillCard);
     root.querySelector('ha-card').setAttribute('aria-label', this._actionLabel(t));
     const icon = root.querySelector('.icon');
     icon.dataset.active = active ? 'true' : 'false';
@@ -1581,6 +1583,8 @@ export class ClimateFlowCard extends HTMLElementBase {
     this._paintIcon(icon, root.querySelector('.icon ha-icon'), picture);
     root.querySelector('.title').textContent = String(title);
     const statusEl = root.querySelector('.status');
+    statusEl.dataset.climateState = unavailable ? 'unavailable' : active ? 'active' : 'idle';
+    statusEl.dataset.showStateIndicator = String(c.show_state_chip || unavailable);
     if (unavailable) {
       if (c.show_unavailable_badge) statusEl.textContent = t.unavailable;
       else statusEl.hidden = true;
@@ -1687,11 +1691,11 @@ export class ClimateFlowCard extends HTMLElementBase {
     const picture = c.show_entity_picture ? String(c.entity_picture || a.entity_picture || '') : '';
     this.shadowRoot.innerHTML = `<style>
       :host{display:block;color:var(--primary-text-color);font-family:var(--paper-font-body1_-_font-family,inherit)}
-      ha-card{--cf-accent:var(--climate-flow-accent-color,var(--primary-color));position:relative;overflow:hidden;border:1px solid var(--divider-color);border-radius:var(--climate-flow-border-radius,20px);background:var(--ha-card-background,var(--card-background-color));padding:14px 16px;box-sizing:border-box;min-height:106px;display:grid;grid-template-rows:auto auto;gap:12px;box-shadow:0 16px 34px -26px rgba(0,0,0,.95);cursor:pointer}
+       ha-card{--cf-accent:var(--climate-flow-accent-color,var(--primary-color));--cf-card-surface:var(--ha-card-background,var(--card-background-color));position:relative;overflow:hidden;border:1px solid color-mix(in srgb,var(--divider-color) 82%,transparent);border-radius:var(--climate-flow-border-radius,20px);background:var(--cf-card-surface);padding:14px 16px;box-sizing:border-box;min-height:106px;display:grid;grid-template-rows:auto auto;gap:12px;box-shadow:0 16px 34px -26px rgba(0,0,0,.95);cursor:pointer;transition:background-color .16s ease}
       ha-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,var(--cf-accent),transparent 70%)}
       ha-card:focus-visible{outline:2px solid var(--cf-accent);outline-offset:2px}
-      ha-card[data-surface="elevated"]{background:color-mix(in srgb,var(--ha-card-background,var(--card-background-color)) 84%,var(--text-primary-color) 16%);border-color:color-mix(in srgb,var(--divider-color) 45%,transparent);box-shadow:0 22px 46px -30px rgba(0,0,0,.95)}
-      ha-card[data-surface="blend"]{background:transparent;border-color:transparent;box-shadow:none}
+       ha-card[data-surface="elevated"]{--cf-card-surface:color-mix(in srgb,var(--ha-card-background,var(--card-background-color)) 84%,var(--text-primary-color) 16%);background:var(--cf-card-surface);border-color:color-mix(in srgb,var(--divider-color) 45%,transparent);box-shadow:0 22px 46px -30px rgba(0,0,0,.95)}
+       ha-card[data-surface="blend"]{--cf-card-surface:transparent;background:var(--cf-card-surface);border-color:transparent;box-shadow:none}
       .head,.body{display:flex;align-items:center;gap:10px;min-width:0;white-space:nowrap;overflow:hidden}
       .body{overflow-x:auto;overflow-y:hidden;gap:8px;padding-bottom:2px;scrollbar-width:thin}
       .icon{width:36px;height:36px;flex:0 0 36px;border-radius:50%;display:grid;place-items:center;background:color-mix(in srgb,var(--cf-accent) 16%,transparent);color:var(--cf-accent);border:1px solid color-mix(in srgb,var(--cf-accent) 32%,transparent)}
@@ -1714,11 +1718,18 @@ export class ClimateFlowCard extends HTMLElementBase {
       button{font:inherit;color:var(--primary-text-color);background:var(--secondary-background-color);border:0;border-radius:999px;padding:7px 11px;cursor:pointer}.head .schedule{display:grid;place-items:center;flex:0 0 auto;padding:8px 10px}.head .schedule[data-active="true"]{background:var(--climate-flow-accent-color,var(--primary-color));color:var(--text-primary-color,#fff)}button:focus-visible,input:focus-visible{outline:2px solid var(--cf-accent);outline-offset:2px}.selected{background:var(--cf-accent);color:var(--text-primary-color,#fff)}
       select:focus-visible{outline:2px solid var(--cf-accent);outline-offset:2px}.badge{color:var(--error-color);font-size:11px;white-space:nowrap;flex:0 0 auto}.empty{color:var(--secondary-text-color);overflow:hidden;text-overflow:ellipsis}
        @media(max-width:420px){ha-card{padding:12px 12px 13px;gap:10px}.head,.body{gap:6px}.target{font-size:27px}.body button[data-delta]{width:34px;height:34px}.chip{max-width:74px}}
-       ${BUTTON_FEEDBACK_CSS}
+        ${BUTTON_FEEDBACK_CSS}
+       @media (hover:hover) and (pointer:fine){ha-card:not([data-surface="blend"]):hover{background-color:color-mix(in srgb,var(--cf-accent) 5%,var(--cf-card-surface))}ha-card[data-surface="blend"]:hover{background-color:color-mix(in srgb,var(--cf-accent) 5%,transparent)}}
+       ha-card:not([data-surface="blend"]).card-press-feedback{background-color:color-mix(in srgb,var(--cf-accent) 9%,var(--cf-card-surface))}
+       ha-card[data-surface="blend"].card-press-feedback{background-color:color-mix(in srgb,var(--cf-accent) 9%,transparent)}
+       @media(prefers-reduced-motion:reduce){ha-card{transition:none!important}}
+       ha-card[data-motion="off"]{transition:none!important}
      </style><ha-card tabindex="0" role="group" aria-label="Tap card background to toggle heating"><div class="head"><span class="icon"><ha-icon></ha-icon></span><span class="title"></span><span class="chips"></span><button class="schedule" aria-label="Open schedule details" title="Open schedule details"><ha-icon icon="mdi:calendar-clock"></ha-icon></button></div>
        <div class="body"></div></ha-card>`;
     const root = this.shadowRoot;
-    this._bindCardToggle(root.querySelector('ha-card'));
+    const compactCard = root.querySelector('ha-card');
+    this._bindCardToggle(compactCard);
+    this._bindCardSurfaceFeedback(compactCard);
     root.querySelector('ha-card').setAttribute('aria-label', this._actionLabel(t));
     root.querySelector('.icon ha-icon').setAttribute('icon', String(c.icon || a.icon || 'mdi:thermostat'));
     root.querySelector('.icon').dataset.active = String(active);
@@ -1841,11 +1852,11 @@ export class ClimateFlowCard extends HTMLElementBase {
     const geometry = this._dialGeometry(model);
     this.shadowRoot.innerHTML = `<style>
       :host{display:block;color:var(--primary-text-color);font-family:var(--paper-font-body1_-_font-family,inherit)}
-      ha-card{--cf-accent:var(--climate-flow-accent-color,var(--primary-color));position:relative;overflow:hidden;border:1px solid var(--divider-color);border-radius:var(--climate-flow-border-radius,24px);background:var(--ha-card-background,var(--card-background-color));padding:14px 16px 16px;box-sizing:border-box;display:grid;grid-template-rows:auto auto auto;gap:10px;box-shadow:0 18px 40px -28px rgba(0,0,0,.95);cursor:pointer}
+       ha-card{--cf-accent:var(--climate-flow-accent-color,var(--primary-color));--cf-card-surface:var(--ha-card-background,var(--card-background-color));position:relative;overflow:hidden;border:1px solid color-mix(in srgb,var(--divider-color) 82%,transparent);border-radius:var(--climate-flow-border-radius,24px);background:var(--cf-card-surface);padding:14px 16px 16px;box-sizing:border-box;display:grid;grid-template-rows:auto auto auto;gap:10px;box-shadow:0 18px 40px -28px rgba(0,0,0,.95);cursor:pointer;transition:background-color .16s ease}
       ha-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,var(--cf-accent),transparent 70%)}
       ha-card:focus-visible{outline:2px solid var(--cf-accent);outline-offset:2px}
-      ha-card[data-surface="elevated"]{background:color-mix(in srgb,var(--ha-card-background,var(--card-background-color)) 84%,var(--text-primary-color) 16%);border-color:color-mix(in srgb,var(--divider-color) 45%,transparent);box-shadow:0 24px 48px -30px rgba(0,0,0,.95)}
-      ha-card[data-surface="blend"]{background:transparent;border-color:transparent;box-shadow:none}
+       ha-card[data-surface="elevated"]{--cf-card-surface:color-mix(in srgb,var(--ha-card-background,var(--card-background-color)) 84%,var(--text-primary-color) 16%);background:var(--cf-card-surface);border-color:color-mix(in srgb,var(--divider-color) 45%,transparent);box-shadow:0 24px 48px -30px rgba(0,0,0,.95)}
+       ha-card[data-surface="blend"]{--cf-card-surface:transparent;background:var(--cf-card-surface);border-color:transparent;box-shadow:none}
       .head{display:flex;align-items:center;gap:10px;min-width:0;white-space:nowrap;overflow:hidden}
       .icon{width:34px;height:34px;flex:0 0 34px;border-radius:50%;display:grid;place-items:center;background:color-mix(in srgb,var(--cf-accent) 16%,transparent);color:var(--cf-accent);border:1px solid color-mix(in srgb,var(--cf-accent) 32%,transparent)}
       .icon[data-active="true"]{background:var(--cf-accent);color:var(--text-primary-color,#fff);border-color:transparent;box-shadow:0 0 0 4px color-mix(in srgb,var(--cf-accent) 20%,transparent)}
@@ -1874,10 +1885,17 @@ export class ClimateFlowCard extends HTMLElementBase {
       [data-motion="off"] *{animation:none!important;transition:none!important}
        [data-motion="on"] button:not([role="slider"]):active{transform:scale(.95)}
        @media(max-width:420px){ha-card{padding:12px 12px 14px;gap:8px}.hero{font-size:30px}.dial{width:min(100%,196px)}.row button[data-delta]{width:34px;height:34px}}
-       ${BUTTON_FEEDBACK_CSS}
+        ${BUTTON_FEEDBACK_CSS}
+       @media (hover:hover) and (pointer:fine){ha-card:not([data-surface="blend"]):hover{background-color:color-mix(in srgb,var(--cf-accent) 5%,var(--cf-card-surface))}ha-card[data-surface="blend"]:hover{background-color:color-mix(in srgb,var(--cf-accent) 5%,transparent)}}
+       ha-card:not([data-surface="blend"]).card-press-feedback{background-color:color-mix(in srgb,var(--cf-accent) 9%,var(--cf-card-surface))}
+       ha-card[data-surface="blend"].card-press-feedback{background-color:color-mix(in srgb,var(--cf-accent) 9%,transparent)}
+       @media(prefers-reduced-motion:reduce){ha-card{transition:none!important}}
+       ha-card[data-motion="off"]{transition:none!important}
       </style><ha-card tabindex="0" role="group" aria-label="Tap card background to toggle heating"><div class="head"><span class="icon"><ha-icon></ha-icon></span><span class="title"></span><span class="chips"></span><button class="schedule" aria-label="Open schedule details" title="Open schedule details"><ha-icon icon="mdi:calendar-clock"></ha-icon></button></div><div class="stage"><svg class="dial" viewBox="0 0 200 200"><circle class="track" cx="100" cy="100" r="80" transform="rotate(135 100 100)"></circle><circle class="value" cx="100" cy="100" r="80" transform="rotate(135 100 100)"></circle><g class="thumbs"></g></svg><div class="center"><span class="hero"><strong></strong><span class="unit"></span></span><span class="sub"></span></div></div><div class="row"></div></ha-card>`;
     const root = this.shadowRoot;
-    this._bindCardToggle(root.querySelector('ha-card'));
+    const circularCard = root.querySelector('ha-card');
+    this._bindCardToggle(circularCard);
+    this._bindCardSurfaceFeedback(circularCard);
     root.querySelector('ha-card').setAttribute('aria-label', this._actionLabel(t));
     const iconBox = root.querySelector('.icon');
     iconBox.dataset.active = active ? 'true' : 'false';
@@ -2692,14 +2710,23 @@ export class ClimateFlowCard extends HTMLElementBase {
       this._pillStepFeedbackTimer = null;
     }, 480);
   }
-  _flashPillCardFeedback() {
-    clearTimeout(this._pillCardFeedbackTimer);
-    this._pillCardPressFeedback = true;
-    this.shadowRoot?.querySelector('ha-card')?.classList.add('pill-press-feedback');
-    this._pillCardFeedbackTimer = setTimeout(() => {
-      this._pillCardPressFeedback = false;
-      this.shadowRoot?.querySelector('ha-card')?.classList.remove('pill-press-feedback');
-      this._pillCardFeedbackTimer = null;
+  _bindCardSurfaceFeedback(card) {
+    if (!card) return;
+    if (this._cardPressFeedback) card.classList.add('card-press-feedback');
+    card.addEventListener('pointerdown', (event) => {
+      if (event.button !== undefined && event.button !== 0) return;
+      this._flashCardSurfaceFeedback();
+    }, { passive: true });
+    card.addEventListener('click', () => this._flashCardSurfaceFeedback(), true);
+  }
+  _flashCardSurfaceFeedback() {
+    clearTimeout(this._cardSurfaceFeedbackTimer);
+    this._cardPressFeedback = true;
+    this.shadowRoot?.querySelector('ha-card')?.classList.add('card-press-feedback');
+    this._cardSurfaceFeedbackTimer = setTimeout(() => {
+      this._cardPressFeedback = false;
+      this.shadowRoot?.querySelector('ha-card')?.classList.remove('card-press-feedback');
+      this._cardSurfaceFeedbackTimer = null;
     }, 260);
   }
   _setTemperature(value, entity, options = {}) {

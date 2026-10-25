@@ -39,10 +39,12 @@ test('the pill-card target keeps its original unboxed setpoint appearance', () =
   const source = readFileSync(new URL('./custom_components/climate_flow_scheduler/www/climate-flow-card.js', import.meta.url), 'utf8');
   assert.match(source, /\.controls\{[^}]*gap:0;background:var\(--secondary-background-color\);border-radius:999px;padding:2px;/);
   assert.match(source, /\.controls button\{[^}]*background:transparent;border:0;border-radius:999px;padding:7px 10px/);
-  assert.match(source, /\.controls \.setpoint\{font-weight:600;min-width:58px;text-align:center;background:transparent;font-size:14px;padding:7px 2px\}/);
+  assert.match(source, /\.controls \.setpoint\{font-weight:700;min-width:58px;text-align:center;background:transparent;font-size:15px;padding:7px 2px;font-variant-numeric:tabular-nums;letter-spacing:-\.02em\}/);
   assert.doesNotMatch(source, /\.controls button\[data-delta\]\{[^}]*border:/);
   assert.match(source, /\.controls button\[data-delta\]:not\(:disabled\):hover\{background:var\(--divider-color\);color:var\(--primary-text-color\);box-shadow:none\}/);
   assert.match(source, /\.controls button\[data-delta\]\.step-feedback:not\(:disabled\),\.controls button\[data-delta\]:not\(:disabled\):active\{background:var\(--divider-color\);color:var\(--primary-text-color\);box-shadow:none;transform:scale\(\.96\)\}/);
+  assert.match(source, /\.status\[data-climate-state="active"\]\[data-show-state-indicator="true"\]::before/);
+  assert.match(source, /\.status\[data-climate-state="unavailable"\]\{color:var\(--error-color\)\}/);
 });
 
 test('editor schema groups the options into localized sections', () => {
