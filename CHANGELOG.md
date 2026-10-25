@@ -1,5 +1,10 @@
 # Changelog
 
+## v1.7.4
+
+- Add themed, accessible `− / +` stepper buttons to temperature fields in the schedule editor. They follow the climate entity's step and limits, and preserve the minimum gap between heat_cool bounds.
+- Restore the pill card's target value and surrounding control group to their original appearance while retaining the refined step buttons.
+
 ## v1.7.3
 
 - Give the schedule editor a more polished, responsive layout with grouped program settings, clearer status, refined slot cards, day selectors and save actions, while retaining Home Assistant theme colors, focus visibility and reduced-motion support.

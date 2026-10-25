@@ -1540,13 +1540,13 @@ export class ClimateFlowCard extends HTMLElementBase {
       .current ha-icon{--mdc-icon-size:15px;display:block;color:currentColor;opacity:.85}
       .current span{white-space:nowrap}
       .pill [hidden]{display:none!important}
-       .controls{flex:0 1 auto;min-width:0;display:flex;align-items:center;gap:3px;background:color-mix(in srgb,var(--climate-flow-accent-color,var(--primary-color)) 5%,var(--secondary-background-color));border:1px solid color-mix(in srgb,var(--divider-color) 75%,transparent);border-radius:999px;padding:3px;max-width:42%;overflow-x:auto;overflow-y:hidden;overscroll-behavior-inline:contain;scrollbar-width:thin;box-shadow:inset 0 1px 0 color-mix(in srgb,var(--text-primary-color,#fff) 8%,transparent)}
+       .controls{flex:0 1 auto;min-width:0;display:flex;align-items:center;gap:0;background:var(--secondary-background-color);border-radius:999px;padding:2px;max-width:42%;overflow-x:auto;overflow-y:hidden;overscroll-behavior-inline:contain;scrollbar-width:thin}
        .controls button{font:inherit;font-size:14px;color:var(--primary-text-color);background:transparent;border:0;border-radius:999px;padding:7px 10px;cursor:pointer;white-space:nowrap;flex:0 0 auto}
        .controls button[data-delta]{display:grid;place-items:center;width:36px;height:36px;padding:0;border:1px solid color-mix(in srgb,var(--climate-flow-accent-color,var(--primary-color)) 26%,var(--divider-color));border-radius:12px;background:linear-gradient(180deg,color-mix(in srgb,var(--climate-flow-accent-color,var(--primary-color)) 12%,var(--secondary-background-color)),var(--secondary-background-color));color:var(--climate-flow-accent-color,var(--primary-color));font-size:19px;font-weight:700;line-height:1;font-variant-numeric:tabular-nums;box-shadow:inset 0 1px 0 color-mix(in srgb,var(--text-primary-color,#fff) 12%,transparent),0 2px 5px rgba(0,0,0,.12);transition:background-color .16s,border-color .16s,box-shadow .16s}
        .controls button[data-delta]:hover{background:color-mix(in srgb,var(--climate-flow-accent-color,var(--primary-color)) 19%,var(--secondary-background-color));border-color:color-mix(in srgb,var(--climate-flow-accent-color,var(--primary-color)) 52%,var(--divider-color));box-shadow:0 3px 8px color-mix(in srgb,var(--climate-flow-accent-color,var(--primary-color)) 20%,transparent)}
        .controls button:focus-visible{outline:2px solid var(--primary-color);outline-offset:2px}
       .controls button:disabled{opacity:.45;cursor:default;background:var(--secondary-background-color)}
-       .controls .setpoint{font-weight:700;min-width:62px;text-align:center;background:color-mix(in srgb,var(--climate-flow-accent-color,var(--primary-color)) 9%,transparent);color:var(--primary-text-color);font-size:14px;font-variant-numeric:tabular-nums;padding:7px 5px}
+       .controls .setpoint{font-weight:600;min-width:58px;text-align:center;background:transparent;font-size:14px;padding:7px 2px}
        .controls select{font:inherit;font-size:13px;color:var(--primary-text-color);background:transparent;border:0;border-radius:999px;padding:7px 5px;cursor:pointer;min-width:54px;max-width:96px;overflow:hidden;text-overflow:ellipsis}
         .controls select:focus-visible{outline:2px solid var(--primary-color);outline-offset:0}
        .controls .setpoint:focus-visible{outline-offset:0;border-radius:10px}
@@ -2039,7 +2039,13 @@ export class ClimateFlowCard extends HTMLElementBase {
       .temperature-value:focus-within{border-color:var(--climate-flow-accent-color,var(--primary-color));background:color-mix(in srgb,var(--climate-flow-accent-color,var(--primary-color)) 4%,var(--card-background-color,var(--ha-card-background)));box-shadow:0 0 0 3px color-mix(in srgb,var(--climate-flow-accent-color,var(--primary-color)) 16%,transparent),inset 0 1px 2px rgba(0,0,0,.06)}
       .field .temperature-value input{flex:1 1 auto;width:100%;min-width:0;padding:7px 0;border:0;border-radius:0;background:transparent;box-shadow:none;text-align:right;font-size:17px;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
       .field .temperature-value input:focus-visible{outline:none;border-color:transparent}
+      .temperature-value input[type=number]{appearance:textfield;-moz-appearance:textfield}
+      .temperature-value input[type=number]::-webkit-inner-spin-button,.temperature-value input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
       .temperature-unit{flex:0 0 auto;color:var(--secondary-text-color);font-size:12px;font-weight:700;white-space:nowrap}
+      .temperature-step{display:grid;place-items:center;flex:0 0 30px;width:30px;height:30px;padding:0;border:1px solid color-mix(in srgb,var(--climate-flow-accent-color,var(--primary-color)) 26%,var(--divider-color));border-radius:10px;background:color-mix(in srgb,var(--climate-flow-accent-color,var(--primary-color)) 9%,var(--card-background-color,var(--ha-card-background)));color:var(--climate-flow-accent-color,var(--primary-color));font:inherit;font-size:18px;font-weight:700;line-height:1;box-shadow:inset 0 1px 0 color-mix(in srgb,var(--text-primary-color,#fff) 12%,transparent)}
+      .temperature-step:hover:not(:disabled){background:color-mix(in srgb,var(--climate-flow-accent-color,var(--primary-color)) 18%,var(--card-background-color,var(--ha-card-background)));border-color:color-mix(in srgb,var(--climate-flow-accent-color,var(--primary-color)) 48%,var(--divider-color));box-shadow:0 2px 7px color-mix(in srgb,var(--climate-flow-accent-color,var(--primary-color)) 18%,transparent)}
+      .temperature-step:disabled{background:var(--secondary-background-color);box-shadow:none}
+      .temperature-step:focus-visible{outline:2px solid var(--climate-flow-accent-color,var(--primary-color));outline-offset:2px}
       .field.outside .temperature-field{flex:1 1 100%;flex-direction:row;align-items:center;justify-content:space-between;width:100%;max-width:none;gap:14px;padding:11px 14px}
       .field.outside .temperature-value{flex:0 1 170px;width:170px}
       .slot .field{gap:12px}
@@ -2087,12 +2093,51 @@ export class ClimateFlowCard extends HTMLElementBase {
     const sensor = this._scheduleSensor(), program = sensor?.attributes?.programs?.[this.config.entity];
     const entity = this._hass?.states?.[this.config.entity];
     const temperatureUnit = this._hass?.config?.unit_system?.temperature || '°C';
-    const makeTemperatureField = (label, input, labelText) => {
+    const adjustTemperatureInput = (input, direction, apply, slot = null, key = null) => {
+      const attributes = entity?.attributes || {};
+      const step = effectiveStep(entity, this.config.step, this._stepOverride);
+      if (step === null || step <= 0) return false;
+      const liveLow = numeric(attributes.target_temp_low), liveHigh = numeric(attributes.target_temp_high);
+      const liveTarget = numeric(attributes.temperature) ?? (liveLow !== null && liveHigh !== null ? (liveLow + liveHigh) / 2 : null);
+      const current = numeric(input.value) ?? (slot && key ? numeric(slot[key]) : null) ?? liveTarget ?? numeric(attributes.min_temp) ?? 20;
+      let lower = numeric(attributes.min_temp) ?? Number.NEGATIVE_INFINITY;
+      let upper = numeric(attributes.max_temp) ?? Number.POSITIVE_INFINITY;
+      if (slot?.range && key === 'targetTempLow') {
+        const high = numeric(slot.targetTempHigh);
+        if (high !== null) upper = Math.min(upper, high - step);
+      } else if (slot?.range && key === 'targetTempHigh') {
+        const low = numeric(slot.targetTempLow);
+        if (low !== null) lower = Math.max(lower, low + step);
+      }
+      if (lower > upper) return false;
+      let next = Math.max(lower, Math.min(upper, current + direction * step));
+      const snapped = clampTarget(next, entity, this.config.step, this._stepOverride);
+      if (snapped !== null) next = snapped;
+      next = Math.max(lower, Math.min(upper, next));
+      next = Number(next.toFixed(8));
+      const changed = Number.isFinite(next) && Math.abs(next - current) > Math.max(1e-9, step * 1e-9);
+      if (!changed || !apply) return changed;
+      input.value = String(next);
+      const InputEvent = input.ownerDocument?.defaultView?.Event;
+      if (InputEvent) input.dispatchEvent(new InputEvent('input', { bubbles: true }));
+      return true;
+    };
+    const makeTemperatureField = (label, input, labelText, slot = null, key = null) => {
       label.className = 'temperature-field';
       const caption = document.createElement('span'); caption.className = 'temperature-caption'; caption.textContent = labelText;
       const value = document.createElement('span'); value.className = 'temperature-value';
+      const decrease = document.createElement('button'); decrease.type = 'button'; decrease.className = 'temperature-step'; decrease.textContent = '−'; decrease.setAttribute('aria-label', t.decrease); decrease.title = t.decrease;
       const unit = document.createElement('span'); unit.className = 'temperature-unit'; unit.setAttribute('aria-hidden', 'true'); unit.textContent = temperatureUnit;
-      value.append(input, unit); label.append(caption, value);
+      const increase = document.createElement('button'); increase.type = 'button'; increase.className = 'temperature-step'; increase.textContent = '+'; increase.setAttribute('aria-label', t.increase); increase.title = t.increase;
+      const refreshSteppers = () => {
+        decrease.disabled = !adjustTemperatureInput(input, -1, false, slot, key);
+        increase.disabled = !adjustTemperatureInput(input, 1, false, slot, key);
+      };
+      decrease.addEventListener('click', () => { adjustTemperatureInput(input, -1, true, slot, key); refreshSteppers(); });
+      increase.addEventListener('click', () => { adjustTemperatureInput(input, 1, true, slot, key); refreshSteppers(); });
+      input.addEventListener('input', refreshSteppers);
+      value.append(decrease, input, unit, increase); label.append(caption, value);
+      refreshSteppers();
     };
     if (!sensor) {
       const p = document.createElement('p'); p.className = 'error'; p.textContent = t.backendMissing; body.append(p);
@@ -2212,7 +2257,7 @@ export class ClimateFlowCard extends HTMLElementBase {
         for (const [key, labelText, type] of entries) {
           const label = document.createElement('label');
           const input = document.createElement('input'); input.type = type; input.value = slot[key] === null || slot[key] === undefined ? '' : String(slot[key]); if (type === 'number') input.step = 'any'; input.setAttribute('aria-label', labelText); input.addEventListener('input', () => slot[key] = input.value);
-          if (type === 'number') makeTemperatureField(label, input, labelText);
+          if (type === 'number') makeTemperatureField(label, input, labelText, slot, key);
           else { label.textContent = labelText; label.append(input); }
           field.append(label);
         }
