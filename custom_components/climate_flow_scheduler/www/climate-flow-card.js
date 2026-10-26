@@ -965,15 +965,20 @@ const BUTTON_FEEDBACK_CSS = `
   @media (prefers-reduced-motion:reduce){button,.days .day,.range-toggle .day{transition:none!important}}
 `;
 
-// A small fire badge distinguishes an actual heating call from an enabled
-// thermostat. The card-wide motion toggle and reduced-motion preference both
-// disable its breathing animation.
+// A bright fire badge distinguishes an actual heating call from an enabled
+// thermostat: an amber disc with a white flame that keeps pulsing a warm glow
+// while heat is being requested. The card-wide motion toggle and reduced-motion
+// preference both stop the pulse but keep the badge, so the state stays visible.
 const HEATING_INDICATOR_CSS = `
-  .icon{position:relative;overflow:visible}
-  .activity-indicator{display:none;position:absolute;right:-3px;bottom:-3px;z-index:2;width:17px;height:17px;place-items:center;box-sizing:border-box;border:2px solid var(--cf-card-surface,var(--climate-flow-pill-background,var(--ha-card-background,var(--card-background-color))));border-radius:50%;background:var(--warning-color,#f59f42);color:#fff}
-  .activity-indicator ha-icon{--mdc-icon-size:11px;display:block}
-  .icon[data-heating="true"] .activity-indicator{display:grid;animation:cf-heating-pulse 1.7s ease-in-out infinite}
-  @keyframes cf-heating-pulse{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.12);opacity:.78}}
+  .icon{position:relative;overflow:visible;--cf-heating-glow:rgba(242,106,10,.65)}
+  .activity-indicator{display:none;position:absolute;right:-5px;bottom:-5px;z-index:2;width:22px;height:22px;place-items:center;box-sizing:border-box;border:2px solid var(--cf-card-surface,var(--climate-flow-pill-background,var(--ha-card-background,var(--card-background-color))));border-radius:50%;background:radial-gradient(circle at 50% 28%,#ffc46e,#ff8f26 58%,#f26a0a);color:#fff}
+  .activity-indicator ha-icon{--mdc-icon-size:15px;display:block;filter:drop-shadow(0 1px 1px rgba(120,45,0,.6))}
+  .icon[data-heating="true"] .activity-indicator{display:grid;box-shadow:0 0 0 2px color-mix(in srgb,#ff8f26 45%,transparent),0 0 12px var(--cf-heating-glow);animation:cf-heating-pulse 1.6s ease-in-out infinite}
+  .icon[data-heating="true"]{box-shadow:0 0 0 3px color-mix(in srgb,#ff8f26 38%,transparent),0 0 16px -2px var(--cf-heating-glow)}
+  @keyframes cf-heating-pulse{0%,100%{transform:scale(1);box-shadow:0 0 0 2px color-mix(in srgb,#ff8f26 45%,transparent),0 0 12px var(--cf-heating-glow)}50%{transform:scale(1.18);box-shadow:0 0 0 4px color-mix(in srgb,#ff8f26 26%,transparent),0 0 20px 2px var(--cf-heating-glow)}}
+  @container climate-flow-card (max-width:320px){.activity-indicator{width:20px;height:20px;right:-4px;bottom:-4px}.activity-indicator ha-icon{--mdc-icon-size:13px}}
+  @container climate-flow-card (min-width:421px){.activity-indicator{width:25px;height:25px;right:-6px;bottom:-6px}.activity-indicator ha-icon{--mdc-icon-size:17px}}
+  @container climate-flow-card (max-width:260px){.activity-indicator{width:17px;height:17px;right:-2px;bottom:-2px}.activity-indicator ha-icon{--mdc-icon-size:11px}}
   @media(prefers-reduced-motion:reduce){.activity-indicator{animation:none!important}}
 `;
 
@@ -1607,37 +1612,37 @@ export class ClimateFlowCard extends HTMLElementBase {
     const picture = c.show_entity_picture ? String(c.entity_picture || a.entity_picture || '') : '';
     this.shadowRoot.innerHTML = `<style>
       :host{display:block;container-type:inline-size;container-name:climate-flow-card;color:var(--primary-text-color);font-family:var(--paper-font-body1_-_font-family,inherit)}
-       ha-card{--cf-accent:var(--climate-flow-accent-color,var(--primary-color));--climate-flow-pill-background:var(--ha-card-background,var(--card-background-color));border:1px solid color-mix(in srgb,var(--divider-color) 82%,transparent);border-radius:var(--climate-flow-border-radius,18px);background:var(--climate-flow-pill-background);padding:7px 8px;box-sizing:border-box;min-height:64px;display:block;overflow:hidden;cursor:pointer;box-shadow:0 4px 14px -12px rgba(0,0,0,.55);transition:background-color .16s ease}ha-card:focus-visible{outline:2px solid var(--cf-accent);outline-offset:2px}
+       ha-card{--cf-accent:var(--climate-flow-accent-color,var(--primary-color));--climate-flow-pill-background:var(--ha-card-background,var(--card-background-color));border:1px solid color-mix(in srgb,var(--divider-color) 82%,transparent);border-radius:var(--climate-flow-border-radius,18px);background:var(--climate-flow-pill-background);padding:8px 10px;box-sizing:border-box;min-height:72px;display:block;overflow:hidden;cursor:pointer;box-shadow:0 4px 14px -12px rgba(0,0,0,.55);transition:background-color .16s ease}ha-card:focus-visible{outline:2px solid var(--cf-accent);outline-offset:2px}
        ha-card[data-surface="elevated"]{--climate-flow-pill-background:color-mix(in srgb,var(--ha-card-background,var(--card-background-color)) 84%,var(--text-primary-color) 16%);background:var(--climate-flow-pill-background);border-color:color-mix(in srgb,var(--divider-color) 45%,transparent);box-shadow:0 18px 38px -26px rgba(0,0,0,.95)}
        ha-card[data-surface="blend"]{--climate-flow-pill-background:transparent;background:var(--climate-flow-pill-background);border-color:transparent;box-shadow:none}
-       .pill{display:grid;grid-template-columns:minmax(0,1fr) auto auto;grid-template-areas:"identity current schedule" "controls controls controls";align-items:center;gap:6px;min-width:0}
-       .identity{grid-area:identity;display:flex;align-items:center;gap:6px;min-width:0}
-      .icon{width:34px;height:34px;flex:0 0 34px;border-radius:50%;display:grid;place-items:center;background:var(--secondary-background-color);color:var(--secondary-text-color);border:1px solid var(--divider-color)}
+       .pill{display:grid;grid-template-columns:minmax(0,1fr) auto auto;grid-template-areas:"identity current schedule" "controls controls controls";align-items:center;gap:7px;min-width:0}
+       .identity{grid-area:identity;display:flex;align-items:center;gap:8px;min-width:0}
+      .icon{width:38px;height:38px;flex:0 0 38px;border-radius:50%;display:grid;place-items:center;background:var(--secondary-background-color);color:var(--secondary-text-color);border:1px solid var(--divider-color)}
       .icon[data-active="true"]{background:var(--climate-flow-accent-color,var(--primary-color));color:var(--text-primary-color,#fff);border-color:transparent}
-      .icon ha-icon{--mdc-icon-size:19px}
+      .icon ha-icon{--mdc-icon-size:21px}
       .icon img{width:100%;height:100%;object-fit:cover;border-radius:50%}.icon ha-icon[hidden]{display:none}
        .meta{flex:1 1 0;min-width:0;display:flex;flex-direction:column;gap:2px;overflow:hidden}
-       .title{font-size:14px;line-height:1.2;font-weight:600;letter-spacing:-.01em;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-        .status{font-size:11px;line-height:1.25;color:var(--secondary-text-color);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-        .status[data-show-state-indicator="true"]::before{content:'';display:inline-block;width:6px;height:6px;margin:0 6px 1px 1px;border-radius:50%;background:var(--secondary-text-color);vertical-align:middle}
+       .title{font-size:15px;line-height:1.2;font-weight:600;letter-spacing:-.01em;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+        .status{font-size:12px;line-height:1.25;color:var(--secondary-text-color);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+        .status[data-show-state-indicator="true"]::before{content:'';display:inline-block;width:7px;height:7px;margin:0 6px 1px 1px;border-radius:50%;background:var(--secondary-text-color);vertical-align:middle}
         .status[data-climate-state="active"][data-show-state-indicator="true"]::before{background:var(--cf-accent);box-shadow:0 0 0 2px color-mix(in srgb,var(--cf-accent) 15%,transparent)}
         .status[data-climate-state="unavailable"]{color:var(--error-color)}.status[data-climate-state="unavailable"]::before{background:var(--error-color)}
        .status-line{display:flex;min-width:0;gap:0;white-space:nowrap;overflow:hidden}
        .status-line span{min-width:0;overflow:hidden;text-overflow:ellipsis}
        .status-line span+span:before{content:' · ';white-space:pre;color:var(--secondary-text-color)}
        .status-line .relative{flex:0 0 auto;overflow:visible}.override-badge{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--primary-color);font-weight:600}
-       .current{grid-area:current;flex:0 1 auto;display:inline-flex;align-items:center;gap:4px;min-width:0;max-width:none;font-size:11px;font-weight:600;padding:6px 8px;border-radius:999px;background:var(--secondary-background-color);color:var(--primary-text-color);white-space:nowrap;font-variant-numeric:tabular-nums}
+       .current{grid-area:current;flex:0 1 auto;display:inline-flex;align-items:center;gap:4px;min-width:0;max-width:none;font-size:12px;font-weight:600;padding:7px 9px;border-radius:999px;background:var(--secondary-background-color);color:var(--primary-text-color);white-space:nowrap;font-variant-numeric:tabular-nums}
       .current[data-active="true"]{background:var(--climate-flow-accent-color,var(--primary-color));color:var(--text-primary-color,#fff)}
-       .current ha-icon{--mdc-icon-size:13px;display:block;flex:0 0 auto;color:currentColor;opacity:.85}
+       .current ha-icon{--mdc-icon-size:14px;display:block;flex:0 0 auto;color:currentColor;opacity:.85}
        .current span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
        .pill [hidden]{display:none!important}
         .controls{grid-area:controls;justify-self:center;width:max-content;flex:0 1 auto;min-width:0;display:flex;align-items:center;gap:0;box-sizing:border-box;background:var(--secondary-background-color);border-radius:999px;padding:2px;max-width:100%;overflow-x:auto;overflow-y:hidden;overscroll-behavior-inline:contain;scrollbar-width:thin;scrollbar-color:color-mix(in srgb,var(--secondary-text-color) 42%,transparent) transparent;-webkit-overflow-scrolling:touch}
         .controls::-webkit-scrollbar{height:4px}.controls::-webkit-scrollbar-track{background:transparent}.controls::-webkit-scrollbar-thumb{background:color-mix(in srgb,var(--secondary-text-color) 42%,transparent);border-radius:999px}
-        .controls button{font:inherit;font-size:13px;color:var(--primary-text-color);background:transparent;border:0;border-radius:999px;padding:6px 7px;cursor:pointer;white-space:nowrap;flex:0 0 auto}
+        .controls button{font:inherit;font-size:14px;color:var(--primary-text-color);background:transparent;border:0;border-radius:999px;min-height:40px;display:inline-flex;align-items:center;justify-content:center;padding:8px 9px;cursor:pointer;white-space:nowrap;flex:0 0 auto}
        .controls button:focus-visible{outline:2px solid var(--primary-color);outline-offset:2px}
       .controls button:disabled{opacity:.45;cursor:default;background:var(--secondary-background-color)}
-        .controls .setpoint{font-weight:700;min-width:48px;text-align:center;background:transparent;font-size:14px;padding:6px 2px;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
-        .controls select{font:inherit;font-size:12px;color:var(--primary-text-color);background:transparent;border:0;border-radius:999px;padding:6px 4px;cursor:pointer;min-width:48px;max-width:72px;overflow:hidden;text-overflow:ellipsis}
+        .controls .setpoint{font-weight:700;min-width:54px;text-align:center;background:transparent;font-size:16px;padding:8px 3px;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+        .controls select{font:inherit;font-size:13px;color:var(--primary-text-color);background:transparent;border:0;border-radius:999px;min-height:40px;padding:8px 5px;cursor:pointer;min-width:52px;max-width:84px;overflow:hidden;text-overflow:ellipsis}
         .controls select:focus-visible{outline:2px solid var(--primary-color);outline-offset:0}
        .controls .setpoint:focus-visible{outline-offset:0;border-radius:10px}
        .controls .setpoint{touch-action:pan-y}[role="slider"]{cursor:ew-resize}
@@ -1645,11 +1650,11 @@ export class ClimateFlowCard extends HTMLElementBase {
        .bump{animation:cf-bump var(--cf-motion,220ms) cubic-bezier(.2,.7,.3,1)}
        [data-motion="off"] *{animation:none!important;transition:none!important}
         [data-motion="on"] button:not([role="slider"]):active{transform:scale(.95)}
-        .actions{grid-area:schedule;display:flex;align-items:center;gap:5px;flex:0 0 auto}.schedule,.auxiliary{display:grid;place-items:center;flex:0 0 auto;padding:6px 8px;font:inherit;color:var(--primary-text-color);background:var(--secondary-background-color);border:0;border-radius:999px;cursor:pointer}
+        .actions{grid-area:schedule;display:flex;align-items:center;gap:5px;flex:0 0 auto}.schedule,.auxiliary{display:grid;place-items:center;flex:0 0 auto;min-width:40px;min-height:40px;padding:8px 10px;font:inherit;color:var(--primary-text-color);background:var(--secondary-background-color);border:0;border-radius:999px;cursor:pointer}
         .schedule[data-active="true"]{background:var(--climate-flow-accent-color,var(--primary-color));color:var(--text-primary-color,#fff)}
-        .schedule:focus-visible,.auxiliary:focus-visible{outline:2px solid var(--primary-color);outline-offset:2px}.schedule ha-icon,.auxiliary ha-icon{--mdc-icon-size:18px;display:block}
-            @container climate-flow-card (max-width:320px){ha-card{padding:6px}.pill{gap:5px}.identity{gap:5px}.icon{width:30px;height:30px;flex-basis:30px}.icon ha-icon{--mdc-icon-size:17px}.current{gap:3px;padding:5px 6px}.current ha-icon{--mdc-icon-size:12px}.controls button{padding:5px}.controls .setpoint{min-width:42px;padding-inline:1px}.schedule,.auxiliary{padding:5px 6px}}
-            @container climate-flow-card (min-width:481px){ha-card{padding:8px 10px}.pill{display:flex;gap:10px}.identity{flex:1 1 0;gap:10px}.icon{width:40px;height:40px;flex-basis:40px}.icon ha-icon{--mdc-icon-size:22px}.title{font-size:15px}.status{font-size:12px}.current{max-width:none;gap:5px;font-size:12px;padding:8px 11px}.current ha-icon{--mdc-icon-size:15px}.controls{width:auto;justify-self:auto;max-width:42%}.controls button{font-size:14px;padding:7px 10px}.controls .setpoint{min-width:58px;font-size:15px;padding:7px 2px}.controls select{font-size:13px;min-width:54px;max-width:96px;padding:7px 5px}.schedule,.auxiliary{padding:8px 11px}}
+        .schedule:focus-visible,.auxiliary:focus-visible{outline:2px solid var(--primary-color);outline-offset:2px}.schedule ha-icon,.auxiliary ha-icon{--mdc-icon-size:20px;display:block}
+            @container climate-flow-card (max-width:320px){ha-card{padding:7px 8px}.pill{gap:6px}.identity{gap:6px}.icon{width:34px;height:34px;flex-basis:34px}.icon ha-icon{--mdc-icon-size:19px}.title{font-size:14px}.status{font-size:11px}.current{gap:3px;padding:7px 8px;font-size:11px}.current ha-icon{--mdc-icon-size:13px}.controls button{font-size:13px;padding:7px 7px}.controls .setpoint{min-width:46px;font-size:15px;padding-inline:2px}.controls select{font-size:12px;min-width:48px;max-width:72px;padding:7px 5px}.schedule,.auxiliary{padding:7px 8px}.schedule ha-icon,.auxiliary ha-icon{--mdc-icon-size:18px}}
+            @container climate-flow-card (min-width:481px){ha-card{padding:8px 10px;min-height:64px}.pill{display:flex;gap:10px}.identity{flex:1 1 0;gap:10px}.icon{width:40px;height:40px;flex-basis:40px}.icon ha-icon{--mdc-icon-size:22px}.title{font-size:15px}.status{font-size:12px}.current{flex:0 0 auto;max-width:none;gap:5px;font-size:12px;padding:8px 11px}.current ha-icon{--mdc-icon-size:15px}.controls{width:auto;justify-self:auto;flex:0 1 auto;max-width:42%}.controls button{font-size:14px;padding:7px 10px}.controls .setpoint{min-width:58px;font-size:15px;padding:7px 2px}.controls select{font-size:13px;min-width:54px;max-width:96px;padding:7px 5px}.schedule,.auxiliary{padding:8px 11px}}
         ${BUTTON_FEEDBACK_CSS}
         .controls button[data-delta]{transition:background-color .12s ease,transform .12s ease}
          @media (hover:hover) and (pointer:fine){.controls button[data-delta]:not(:disabled):hover{background:var(--divider-color);color:var(--primary-text-color);box-shadow:none}}

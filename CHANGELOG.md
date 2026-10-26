@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.9.2
+
+- Make the heating indicator read at a glance: a larger amber-gradient badge with a white flame, a warm glow around both the badge and the entity icon, and a stronger pulse that respects the motion toggle and reduced-motion preference.
+- Enlarge the pill layout's narrow-column sizing — icon, title, status, temperature chip, setpoint, step buttons, and schedule/auxiliary buttons — so the card stays legible on a phone, with a gentler shrink below 320px and the wide single-row layout unchanged.
+- Give the pill controls a 40px minimum touch height (step buttons, setpoint, HVAC selector, schedule and auxiliary buttons) so they are comfortable under a thumb.
+- Keep the temperature chip readable: it no longer truncates on wide cards, and the title ellipsizes first; below 260px the heating badge shrinks so it stops crowding the status line.
+- Refresh the README pill screenshots to the current styling.
+
 ## v1.9.1
 
 - Distinguish an enabled thermostat on standby from one actively heating, with localized status labels and a heating indicator across all card layouts.

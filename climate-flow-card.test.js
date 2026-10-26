@@ -38,8 +38,8 @@ test('temperature inputs and +/- controls use polished theme-aware styling', () 
 test('the pill-card target keeps its original unboxed setpoint appearance', () => {
   const source = readFileSync(new URL('./custom_components/climate_flow_scheduler/www/climate-flow-card.js', import.meta.url), 'utf8');
   assert.match(source, /\.controls\{[^}]*gap:0;[^}]*background:var\(--secondary-background-color\);border-radius:999px;padding:2px;/);
-  assert.match(source, /\.controls button\{[^}]*background:transparent;border:0;border-radius:999px;padding:6px 7px/);
-  assert.match(source, /\.controls \.setpoint\{font-weight:700;min-width:48px;text-align:center;background:transparent;font-size:14px;padding:6px 2px;font-variant-numeric:tabular-nums;letter-spacing:-\.02em\}/);
+  assert.match(source, /\.controls button\{[^}]*background:transparent;border:0;border-radius:999px;min-height:40px;display:inline-flex;align-items:center;justify-content:center;padding:8px 9px/);
+  assert.match(source, /\.controls \.setpoint\{font-weight:700;min-width:54px;text-align:center;background:transparent;font-size:16px;padding:8px 3px;font-variant-numeric:tabular-nums;letter-spacing:-\.02em\}/);
   assert.match(source, /@container climate-flow-card \(min-width:481px\)[^]*?\.controls \.setpoint\{min-width:58px;font-size:15px;padding:7px 2px\}/);
   assert.doesNotMatch(source, /\.controls button\[data-delta\]\{[^}]*border:/);
   assert.match(source, /\.controls button\[data-delta\]:not\(:disabled\):hover\{background:var\(--divider-color\);color:var\(--primary-text-color\);box-shadow:none\}/);
@@ -61,7 +61,7 @@ test('card layouts are mobile-first and scale from their own container width', (
     assert.match(css, /@container climate-flow-card \(min-width:\d+px\)/, `${layout} enhances the mobile base when there is room`);
     assert.doesNotMatch(css, /@media\s*\(max-width:\s*420px\)/, `${layout} does not rely on viewport-first overrides`);
   }
-  assert.match(layouts[0][1], /\.icon\{width:34px;height:34px;flex:0 0 34px/);
+  assert.match(layouts[0][1], /\.icon\{width:38px;height:38px;flex:0 0 38px/);
   assert.match(layouts[0][1], /\.pill\{display:grid;grid-template-columns:minmax\(0,1fr\) auto auto;grid-template-areas:"identity current schedule" "controls controls controls"/);
   assert.match(layouts[0][1], /@container climate-flow-card \(min-width:481px\)\{[^]*?\.pill\{display:flex/);
   assert.match(layouts[0][1], /\.controls\{[^}]*scrollbar-color:color-mix\(in srgb,var\(--secondary-text-color\) 42%,transparent\) transparent/);
