@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.9.1
+
+- Distinguish an enabled thermostat on standby from one actively heating, with localized status labels and a heating indicator across all card layouts.
+
 ## v1.9.0
 
 - Add an optional Device settings panel for configured temperature-calibration and deadzone numbers, sensor-source select, and child-lock switch entities. Values stay synchronized with Home Assistant, edits call the corresponding entity services, and the weekly schedule remains separate.

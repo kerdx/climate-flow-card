@@ -103,7 +103,7 @@ const STRINGS = {
       haptics: 'Haptics', haptics_style: 'Haptic style', animations: 'Animations', animation_duration: 'Animation duration',
     },
     modes: { heat: 'Heat', cool: 'Cool', off: 'Off', auto: 'Auto', heat_cool: 'Heat / cool', dry: 'Dry', fan_only: 'Fan only' },
-    statuses: { heating: 'Heating', cooling: 'Cooling', drying: 'Drying', fan: 'Fan', idle: 'Idle', off: 'Off', preheating: 'Preheating', defrosting: 'Defrosting', heat: 'Heat', cool: 'Cool', auto: 'Auto', heat_cool: 'Heat / cool', dry: 'Dry', fan_only: 'Fan only' },
+    statuses: { heating: 'Heating', cooling: 'Cooling', drying: 'Drying', fan: 'Fan', idle: 'Idle', standby: 'Standby', off: 'Off', preheating: 'Preheating', defrosting: 'Defrosting', heat: 'Heat', cool: 'Cool', auto: 'Auto', heat_cool: 'Heat / cool', dry: 'Dry', fan_only: 'Fan only' },
     // Backend last_error carries {code, context, message}; keys are the
     // machine-readable codes from the scheduler backend, {placeholders}
     // are substituted from the error context (plus its message).
@@ -282,7 +282,7 @@ const STRINGS = {
       haptics: 'Feedback tattile', haptics_style: 'Stile feedback', animations: 'Animazioni', animation_duration: 'Durata animazione',
     },
     modes: { heat: 'Caldo', cool: 'Freddo', off: 'Spento', auto: 'Automatico', heat_cool: 'Caldo / freddo', dry: 'Deumidificazione', fan_only: 'Solo ventilazione' },
-    statuses: { heating: 'Riscaldamento', cooling: 'Raffreddamento', drying: 'Deumidificazione', fan: 'Ventilazione', idle: 'Inattivo', off: 'Spento', preheating: 'Preriscaldamento', defrosting: 'Sbrinamento', heat: 'Caldo', cool: 'Freddo', auto: 'Automatico', heat_cool: 'Caldo / freddo', dry: 'Deumidificazione', fan_only: 'Solo ventilazione' },
+    statuses: { heating: 'Riscaldamento', cooling: 'Raffreddamento', drying: 'Deumidificazione', fan: 'Ventilazione', idle: 'Inattivo', standby: 'In attesa', off: 'Spento', preheating: 'Preriscaldamento', defrosting: 'Sbrinamento', heat: 'Caldo', cool: 'Freddo', auto: 'Automatico', heat_cool: 'Caldo / freddo', dry: 'Deumidificazione', fan_only: 'Solo ventilazione' },
     errors: {
       invalid_program: '{message}',
       invalid_override_duration: 'Scegli una durata di override valida.',
@@ -701,6 +701,11 @@ export const isClimateActive = (entityOrState) => {
   if (!trimmed || trimmed === 'unknown' || trimmed === 'unavailable' || trimmed === 'off') return false;
   return true;
 };
+export const isClimateHeating = (entity) => {
+  if (!isClimateActive(entity)) return false;
+  const action = entity?.attributes?.hvac_action;
+  return typeof action === 'string' && ['heating', 'preheating'].includes(action.trim().toLowerCase());
+};
 export const isScheduleEnabled = (program) => Boolean(program?.enabled);
 export const awayTemperaturePayload = (value) => {
   if (value === null || value === undefined || String(value).trim() === '') return null;
@@ -958,6 +963,18 @@ const BUTTON_FEEDBACK_CSS = `
   button:disabled{opacity:.45;cursor:default}
   button:focus-visible{outline:2px solid var(--climate-flow-accent-color,var(--primary-color));outline-offset:2px}
   @media (prefers-reduced-motion:reduce){button,.days .day,.range-toggle .day{transition:none!important}}
+`;
+
+// A small fire badge distinguishes an actual heating call from an enabled
+// thermostat. The card-wide motion toggle and reduced-motion preference both
+// disable its breathing animation.
+const HEATING_INDICATOR_CSS = `
+  .icon{position:relative;overflow:visible}
+  .activity-indicator{display:none;position:absolute;right:-3px;bottom:-3px;z-index:2;width:17px;height:17px;place-items:center;box-sizing:border-box;border:2px solid var(--cf-card-surface,var(--climate-flow-pill-background,var(--ha-card-background,var(--card-background-color))));border-radius:50%;background:var(--warning-color,#f59f42);color:#fff}
+  .activity-indicator ha-icon{--mdc-icon-size:11px;display:block}
+  .icon[data-heating="true"] .activity-indicator{display:grid;animation:cf-heating-pulse 1.7s ease-in-out infinite}
+  @keyframes cf-heating-pulse{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.12);opacity:.78}}
+  @media(prefers-reduced-motion:reduce){.activity-indicator{animation:none!important}}
 `;
 
 // Editor chrome: section cards with a label/description row and the control
@@ -1450,10 +1467,14 @@ export class ClimateFlowCard extends HTMLElementBase {
     if (alert) alert.textContent = t.serviceError(errorLabel(t, error));
   }
   _statusDisplay(entity, strings = STRINGS.en) {
+    if (typeof entity?.state === 'string' && entity.state.trim().toLowerCase() === 'off') return statusLabel('off', strings);
+    const action = entity?.attributes?.hvac_action;
+    if (typeof action === 'string' && action.trim().toLowerCase() === 'idle' && isClimateActive(entity)) {
+      return strings.statuses?.standby || statusLabel('idle', strings);
+    }
     const key = climateStatusKey(entity);
     const hass = this._hass;
     try {
-      const action = entity?.attributes?.hvac_action;
       if (typeof action === 'string' && action.trim() && valid(action.trim()) && typeof hass?.formatEntityAttributeValue === 'function') {
         const formatted = hass.formatEntityAttributeValue(entity, 'hvac_action');
         if (typeof formatted === 'string' && formatted.trim()) return formatted;
@@ -1637,9 +1658,11 @@ export class ClimateFlowCard extends HTMLElementBase {
           @media (hover:hover) and (pointer:fine){ha-card:not([data-surface="blend"]):hover{background-color:color-mix(in srgb,var(--cf-accent) 5%,var(--climate-flow-pill-background))}ha-card[data-surface="blend"]:hover{background-color:color-mix(in srgb,var(--cf-accent) 5%,transparent)}}
           ha-card:not([data-surface="blend"]).card-press-feedback{background-color:color-mix(in srgb,var(--cf-accent) 9%,var(--climate-flow-pill-background))}
           ha-card[data-surface="blend"].card-press-feedback{background-color:color-mix(in srgb,var(--cf-accent) 9%,transparent)}
-         @media(prefers-reduced-motion:reduce){ha-card{transition:none!important}}
-         ha-card[data-motion="off"]{transition:none!important}
-         </style><ha-card tabindex="0" role="group" aria-label="Tap card background to toggle heating"><div class="pill"><div class="identity"><span class="icon"><ha-icon></ha-icon></span><div class="meta"><span class="title"></span><span class="status"></span></div></div><span class="current"><ha-icon></ha-icon><span></span></span><div class="controls"></div><div class="actions"><button class="schedule" aria-label="Open schedule details" title="Open schedule details"><ha-icon icon="mdi:calendar-clock"></ha-icon></button></div></div></ha-card>`;
+          @media(prefers-reduced-motion:reduce){ha-card{transition:none!important}}
+          ha-card[data-motion="off"]{transition:none!important}
+         ${HEATING_INDICATOR_CSS}
+         ${BUTTON_FEEDBACK_CSS}
+          </style><ha-card tabindex="0" role="group" aria-label="Tap card background to toggle heating"><div class="pill"><div class="identity"><span class="icon"><ha-icon></ha-icon><span class="activity-indicator" aria-hidden="true"><ha-icon icon="mdi:fire"></ha-icon></span></span><div class="meta"><span class="title"></span><span class="status"></span></div></div><span class="current"><ha-icon></ha-icon><span></span></span><div class="controls"></div><div class="actions"><button class="schedule" aria-label="Open schedule details" title="Open schedule details"><ha-icon icon="mdi:calendar-clock"></ha-icon></button></div></div></ha-card>`;
     const root = this.shadowRoot;
     const pillCard = root.querySelector('ha-card');
     this._bindCardToggle(pillCard);
@@ -1647,6 +1670,7 @@ export class ClimateFlowCard extends HTMLElementBase {
     root.querySelector('ha-card').setAttribute('aria-label', this._actionLabel(t));
     const icon = root.querySelector('.icon');
     icon.dataset.active = active ? 'true' : 'false';
+    icon.dataset.heating = String(!unavailable && isClimateHeating(e));
     root.querySelector('.icon ha-icon').setAttribute('icon', String(c.icon || a.icon || 'mdi:thermostat'));
     root.querySelector('.icon ha-icon').setAttribute('aria-hidden', 'true');
     this._paintIcon(icon, root.querySelector('.icon ha-icon'), picture);
@@ -1791,13 +1815,14 @@ export class ClimateFlowCard extends HTMLElementBase {
       select:focus-visible{outline:2px solid var(--cf-accent);outline-offset:2px}.badge{color:var(--error-color);font-size:11px;white-space:nowrap;flex:0 0 auto}.empty{color:var(--secondary-text-color);overflow:hidden;text-overflow:ellipsis}
          @container climate-flow-card (max-width:320px){ha-card{padding:10px 9px}.head,.body{gap:5px}.icon{width:32px;height:32px;flex-basis:32px}.icon ha-icon{--mdc-icon-size:18px}.chips{gap:4px}.chip{max-width:64px;padding:4px 6px}.target{font-size:25px}.body button[data-delta]{width:32px;height:32px}.body select{min-width:62px;max-width:98px}}
          @container climate-flow-card (min-width:421px){ha-card{padding:14px 16px;gap:12px}.head,.body{gap:10px}.body{gap:8px}.icon{width:36px;height:36px;flex-basis:36px}.icon ha-icon{--mdc-icon-size:20px}.chips{gap:6px}.chip{max-width:110px;padding:5px 9px}.target{font-size:34px}.target .unit{font-size:14px}.body button{padding:7px 11px}.body button[data-delta]{width:38px;height:38px;font-size:19px;border-radius:13px}.body select{min-width:78px;max-width:130px;padding:8px 10px;font-size:13px}.head .schedule,.head .auxiliary{padding:8px 10px}}
-        ${BUTTON_FEEDBACK_CSS}
+         ${HEATING_INDICATOR_CSS}
+         ${BUTTON_FEEDBACK_CSS}
        @media (hover:hover) and (pointer:fine){ha-card:not([data-surface="blend"]):hover{background-color:color-mix(in srgb,var(--cf-accent) 5%,var(--cf-card-surface))}ha-card[data-surface="blend"]:hover{background-color:color-mix(in srgb,var(--cf-accent) 5%,transparent)}}
        ha-card:not([data-surface="blend"]).card-press-feedback{background-color:color-mix(in srgb,var(--cf-accent) 9%,var(--cf-card-surface))}
        ha-card[data-surface="blend"].card-press-feedback{background-color:color-mix(in srgb,var(--cf-accent) 9%,transparent)}
        @media(prefers-reduced-motion:reduce){ha-card{transition:none!important}}
        ha-card[data-motion="off"]{transition:none!important}
-      </style><ha-card tabindex="0" role="group" aria-label="Tap card background to toggle heating"><div class="head"><span class="icon"><ha-icon></ha-icon></span><span class="title"></span><span class="chips"></span><div class="actions"><button class="schedule" aria-label="Open schedule details" title="Open schedule details"><ha-icon icon="mdi:calendar-clock"></ha-icon></button></div></div>
+      </style><ha-card tabindex="0" role="group" aria-label="Tap card background to toggle heating"><div class="head"><span class="icon"><ha-icon></ha-icon><span class="activity-indicator" aria-hidden="true"><ha-icon icon="mdi:fire"></ha-icon></span></span><span class="title"></span><span class="chips"></span><div class="actions"><button class="schedule" aria-label="Open schedule details" title="Open schedule details"><ha-icon icon="mdi:calendar-clock"></ha-icon></button></div></div>
        <div class="body"></div></ha-card>`;
     const root = this.shadowRoot;
     const compactCard = root.querySelector('ha-card');
@@ -1806,11 +1831,12 @@ export class ClimateFlowCard extends HTMLElementBase {
     root.querySelector('ha-card').setAttribute('aria-label', this._actionLabel(t));
     root.querySelector('.icon ha-icon').setAttribute('icon', String(c.icon || a.icon || 'mdi:thermostat'));
     root.querySelector('.icon').dataset.active = String(active);
+    root.querySelector('.icon').dataset.heating = String(!unavailable && isClimateHeating(e));
     this._paintIcon(root.querySelector('.icon'), root.querySelector('.icon ha-icon'), picture);
     root.querySelector('.title').textContent = String(title);
     const chips = root.querySelector('.chips');
     const addChip = (show, text, modifier = '') => { if (show && text) { const span = document.createElement('span'); span.className = modifier ? `chip ${modifier}` : 'chip'; span.textContent = String(text); chips.append(span); } };
-    addChip(c.show_state_chip && !unavailable, modeLabel(e?.state, t), 'state');
+    addChip(c.show_state_chip && !unavailable, this._statusDisplay(e, t), 'state');
     addChip(c.show_current_temperature_chip && !unavailable, plan.chip === 'target' ? (hasTarget ? (model.dual ? `${model.low}–${model.high}${unit}` : `${target}${unit}`) : '') : (currentValue !== null ? `${currentValue}${unit}` : ''));
     addChip(c.show_humidity_chip && !unavailable, numeric(a.current_humidity) !== null ? `${numeric(a.current_humidity)}%` : '');
     if (c.show_unavailable_badge && unavailable) { const b=document.createElement('span'); b.className='badge'; b.textContent=t.unavailable; chips.append(b); }
@@ -1960,13 +1986,14 @@ export class ClimateFlowCard extends HTMLElementBase {
        [data-motion="on"] button:not([role="slider"]):active{transform:scale(.95)}
          @container climate-flow-card (max-width:320px){ha-card{padding:10px 9px}.head{gap:5px}.chips{gap:4px}.chip{max-width:64px;padding:4px 6px}.dial{width:min(100%,180px)}.hero{font-size:27px}.row{gap:5px}.row button[data-delta]{width:32px;height:32px}.row select{min-width:62px;max-width:98px}}
          @container climate-flow-card (min-width:421px){ha-card{padding:14px 16px 16px;gap:10px}.head{gap:10px}.chips{gap:6px}.chip{max-width:110px;padding:5px 9px}.schedule,.auxiliary{padding:8px 10px}.dial{width:min(100%,240px)}.hero{font-size:38px}.hero .unit{font-size:15px}.sub{font-size:12px}.row{gap:8px}.row button{padding:7px 11px}.row button[data-delta]{width:38px;height:38px;font-size:19px;border-radius:13px}.row select{min-width:78px;max-width:130px;padding:8px 10px;font-size:13px}}
-        ${BUTTON_FEEDBACK_CSS}
+         ${HEATING_INDICATOR_CSS}
+         ${BUTTON_FEEDBACK_CSS}
        @media (hover:hover) and (pointer:fine){ha-card:not([data-surface="blend"]):hover{background-color:color-mix(in srgb,var(--cf-accent) 5%,var(--cf-card-surface))}ha-card[data-surface="blend"]:hover{background-color:color-mix(in srgb,var(--cf-accent) 5%,transparent)}}
        ha-card:not([data-surface="blend"]).card-press-feedback{background-color:color-mix(in srgb,var(--cf-accent) 9%,var(--cf-card-surface))}
        ha-card[data-surface="blend"].card-press-feedback{background-color:color-mix(in srgb,var(--cf-accent) 9%,transparent)}
        @media(prefers-reduced-motion:reduce){ha-card{transition:none!important}}
        ha-card[data-motion="off"]{transition:none!important}
-       </style><ha-card tabindex="0" role="group" aria-label="Tap card background to toggle heating"><div class="head"><span class="icon"><ha-icon></ha-icon></span><span class="title"></span><span class="chips"></span><div class="actions"><button class="schedule" aria-label="Open schedule details" title="Open schedule details"><ha-icon icon="mdi:calendar-clock"></ha-icon></button></div></div><div class="stage"><svg class="dial" viewBox="0 0 200 200"><circle class="track" cx="100" cy="100" r="80" transform="rotate(135 100 100)"></circle><circle class="value" cx="100" cy="100" r="80" transform="rotate(135 100 100)"></circle><g class="thumbs"></g></svg><div class="center"><span class="hero"><strong></strong><span class="unit"></span></span><span class="sub"></span></div></div><div class="row"></div></ha-card>`;
+        </style><ha-card tabindex="0" role="group" aria-label="Tap card background to toggle heating"><div class="head"><span class="icon"><ha-icon></ha-icon><span class="activity-indicator" aria-hidden="true"><ha-icon icon="mdi:fire"></ha-icon></span></span><span class="title"></span><span class="chips"></span><div class="actions"><button class="schedule" aria-label="Open schedule details" title="Open schedule details"><ha-icon icon="mdi:calendar-clock"></ha-icon></button></div></div><div class="stage"><svg class="dial" viewBox="0 0 200 200"><circle class="track" cx="100" cy="100" r="80" transform="rotate(135 100 100)"></circle><circle class="value" cx="100" cy="100" r="80" transform="rotate(135 100 100)"></circle><g class="thumbs"></g></svg><div class="center"><span class="hero"><strong></strong><span class="unit"></span></span><span class="sub"></span></div></div><div class="row"></div></ha-card>`;
     const root = this.shadowRoot;
     const circularCard = root.querySelector('ha-card');
     this._bindCardToggle(circularCard);
@@ -1974,13 +2001,14 @@ export class ClimateFlowCard extends HTMLElementBase {
     root.querySelector('ha-card').setAttribute('aria-label', this._actionLabel(t));
     const iconBox = root.querySelector('.icon');
     iconBox.dataset.active = active ? 'true' : 'false';
+    iconBox.dataset.heating = String(!unavailable && isClimateHeating(e));
     root.querySelector('.icon ha-icon').setAttribute('icon', String(c.icon || a.icon || 'mdi:thermostat'));
     root.querySelector('.icon ha-icon').setAttribute('aria-hidden', 'true');
     this._paintIcon(iconBox, root.querySelector('.icon ha-icon'), picture);
     root.querySelector('.title').textContent = String(title);
     const chips = root.querySelector('.chips');
     const addChip = (show, text, modifier = '') => { if (show && text) { const span = document.createElement('span'); span.className = modifier ? `chip ${modifier}` : 'chip'; span.textContent = String(text); chips.append(span); } };
-    addChip(c.show_state_chip && !unavailable, modeLabel(e?.state, t), 'state');
+    addChip(c.show_state_chip && !unavailable, this._statusDisplay(e, t), 'state');
     addChip(c.show_humidity_chip && !unavailable, numeric(a.current_humidity) !== null ? `${numeric(a.current_humidity)}%` : '');
     if (c.show_unavailable_badge && unavailable) { const b = document.createElement('span'); b.className = 'badge'; b.textContent = t.unavailable; chips.append(b); }
     const schedule = root.querySelector('.schedule');

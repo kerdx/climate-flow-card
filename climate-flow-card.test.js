@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { ClimateFlowCard, ClimateFlowCardEditor, CLIMATE_FLOW_CARD_TAG, CLIMATE_FLOW_CARD_EDITOR_TAG, registerClimateFlowElements, isClimateFlowElementsRegistered, isHomeAssistantFrontendReady, scheduleClimateFlowReregistration, clampTarget, temperaturePayload, targetModel, hvacToggleMode, scheduleDraft, validateScheduleDraft, seedRange, draftSlotPayload, defaultCardConfig, configSchema, configSchemaFields, getEntitySuggestion, sameCardConfig, errorLabel, effectiveStep, normalizeLayout, isClimateActive, isScheduleEnabled, awayTemperaturePayload, schedulableModes, manualOverrideServicePayload, overrideDurationChoices, formatOverrideExpiry, overrideFocusSelector,
+import { ClimateFlowCard, ClimateFlowCardEditor, CLIMATE_FLOW_CARD_TAG, CLIMATE_FLOW_CARD_EDITOR_TAG, registerClimateFlowElements, isClimateFlowElementsRegistered, isHomeAssistantFrontendReady, scheduleClimateFlowReregistration, clampTarget, temperaturePayload, targetModel, hvacToggleMode, scheduleDraft, validateScheduleDraft, seedRange, draftSlotPayload, defaultCardConfig, configSchema, configSchemaFields, getEntitySuggestion, sameCardConfig, errorLabel, effectiveStep, normalizeLayout, isClimateActive, isClimateHeating, isScheduleEnabled, awayTemperaturePayload, schedulableModes, manualOverrideServicePayload, overrideDurationChoices, formatOverrideExpiry, overrideFocusSelector,
   pauseServicePayload, pauseDurationChoices, activePause, PAUSE_DURATIONS, climateStatusKey, statusLabel, modeLabel, resolveLanguage, cardStrings, fieldLabel, pickEntityTimestamp, formatRelativeTime, relativeRefreshDelay, formatNumber, pillStatusParts, currentTemperatureDisplay, CARD_SURFACES, normalizeAccentColor, normalizeSurface, sliderFillPercent, paintSliderFill, CARD_ACTIONS, normalizeCardAction, MODE_ACCENTS, modeAccentColor, cardLanguage, mainTemperatureKind, CARD_OPTION_DEFAULTS, cardDefault, stripCardDefaults, heroTemperaturePlan,
   HAPTIC_STYLES, HAPTIC_PATTERNS, hapticPattern, normalizeHapticStyle, vibrateSupported, fireHaptic,
   ANIMATION_DURATION_DEFAULT, normalizeAnimationDuration, COMMIT_DEBOUNCE_MS, COMMIT_RETRY_MS, COMMIT_RETRIES,
@@ -745,10 +745,11 @@ test('compact layout carries the premium accent, surface and hero-number treatme
   assert.match(compact, /unitText\.className='unit'/);
   assert.match(compact, /targetText\.append\(value, unitText\)/);
   assert.match(compact, /\.chip\.state\{/);
-  assert.match(compact, /modeLabel\(e\?\.state, t\), 'state'\)/);
-  // The icon tells idle from running, and the track is painted from the value.
+  assert.match(compact, /this\._statusDisplay\(e, t\), 'state'\)/);
+  // The icon tells an enabled mode from an active heating call.
   assert.match(compact, /\.icon\[data-active="true"\]/);
   assert.match(compact, /root\.querySelector\('\.icon'\)\.dataset\.active = String\(active\)/);
+  assert.match(compact, /dataset\.heating = String\(!unavailable && isClimateHeating\(e\)\)/);
   assert.match(compact, /--fill,50%/);
   assert.match(compact, /paintSliderFill\(slider\)/);
   assert.match(compact, /\.slider'\)\?\.addEventListener\('input', \(ev\) => paintSliderFill\(ev\.target\)\)/);
@@ -1097,6 +1098,14 @@ test('climate active state distinguishes running modes from off and unavailable'
   assert.equal(isClimateActive(null), false);
 });
 
+test('heating activity uses hvac_action and never treats an off climate as heating', () => {
+  assert.equal(isClimateHeating({ state: 'heat', attributes: { hvac_action: 'heating' } }), true);
+  assert.equal(isClimateHeating({ state: 'heat', attributes: { hvac_action: 'preheating' } }), true);
+  assert.equal(isClimateHeating({ state: 'heat', attributes: { hvac_action: 'idle' } }), false);
+  assert.equal(isClimateHeating({ state: 'off', attributes: { hvac_action: 'heating' } }), false);
+  assert.equal(isClimateHeating({ state: 'unavailable', attributes: { hvac_action: 'heating' } }), false);
+});
+
 test('schedule enabled helper tracks the program enabled flag only', () => {
   assert.equal(isScheduleEnabled({ enabled: true }), true);
   assert.equal(isScheduleEnabled({ enabled: false }), false);
@@ -1142,6 +1151,8 @@ test('UI strings follow the Home Assistant locale with an English fallback', () 
   assert.equal(modeLabel('fan_only', cardStrings('it')), 'Solo ventilazione');
   assert.equal(statusLabel('heating', cardStrings('it')), 'Riscaldamento');
   assert.equal(statusLabel('heating'), 'Heating');
+  assert.equal(cardStrings('it').statuses.standby, 'In attesa');
+  assert.equal(cardStrings('en').statuses.standby, 'Standby');
   assert.equal(fieldLabel(cardStrings('it'), 'entity'), 'Entità climate');
   assert.equal(fieldLabel(cardStrings('it'), 'unknown_field'), 'unknown field');
   assert.match(validateScheduleDraft(scheduleDraft({ enabled: true, slots: [] }), cardStrings('it')), /almeno una fascia/);

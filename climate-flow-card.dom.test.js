@@ -243,6 +243,48 @@ test('pill status indicator distinguishes active, idle and unavailable entities'
   unavailable.card.disconnectedCallback?.();
 });
 
+test('enabled and actively heating states stay distinct in every layout', () => {
+  for (const layout of ['pill', 'compact', 'circular']) {
+    const standby = build({
+      entity: climateEntity({ state: 'heat' }, { hvac_action: 'idle' }),
+      config: { layout },
+    });
+    const standbyIcon = standby.shadow.querySelector('.icon');
+    assert.equal(standbyIcon.dataset.active, 'true', `${layout} marks the thermostat as enabled`);
+    assert.equal(standbyIcon.dataset.heating, 'false', `${layout} does not mistake standby for heating`);
+    const standbyLabel = layout === 'pill'
+      ? standby.shadow.querySelector('.status-line')?.textContent
+      : standby.shadow.querySelector('.chip.state')?.textContent;
+    assert.equal(standbyLabel, 'Standby', `${layout} labels an enabled idle thermostat`);
+    standby.card.disconnectedCallback?.();
+
+    const heating = build({
+      entity: climateEntity({ state: 'heat' }, { hvac_action: 'heating' }),
+      config: { layout },
+    });
+    const heatingIcon = heating.shadow.querySelector('.icon');
+    assert.equal(heatingIcon.dataset.active, 'true', `${layout} keeps the enabled accent`);
+    assert.equal(heatingIcon.dataset.heating, 'true', `${layout} marks a real heating call`);
+    assert.equal(heating.shadow.querySelector('.activity-indicator ha-icon').getAttribute('icon'), 'mdi:fire');
+    const heatingLabel = layout === 'pill'
+      ? heating.shadow.querySelector('.status-line')?.textContent
+      : heating.shadow.querySelector('.chip.state')?.textContent;
+    assert.equal(heatingLabel, 'Heating', `${layout} labels the HVAC action`);
+    assert.match(heating.shadow.querySelector('style').textContent, /@media\(prefers-reduced-motion:reduce\)\{\.activity-indicator/);
+    heating.card.disconnectedCallback?.();
+  }
+
+  const offWithSchedule = build({
+    entity: climateEntity({ state: 'off' }, { hvac_action: 'off' }),
+    config: { layout: 'pill' },
+    programState: { enabled: true },
+  });
+  assert.equal(offWithSchedule.shadow.querySelector('.icon').dataset.active, 'false');
+  assert.equal(offWithSchedule.shadow.querySelector('.icon').dataset.heating, 'false');
+  assert.equal(offWithSchedule.shadow.querySelector('.schedule').dataset.active, 'true', 'the schedule indicator stays independent');
+  offWithSchedule.card.disconnectedCallback?.();
+});
+
 // --------------------------------------------------------------------------
 // Circular dial: dragging
 // --------------------------------------------------------------------------
