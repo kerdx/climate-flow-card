@@ -10,6 +10,7 @@ instead of aborting the whole loop.
 from __future__ import annotations
 
 import unittest
+from types import SimpleNamespace
 
 from ha_test_support import (
     CLOCK,
@@ -94,6 +95,59 @@ class RuntimeEvaluateTests(unittest.IsolatedAsyncioTestCase):
         await scheduler.async_evaluate()
         self.assertEqual(hass.services.calls, [], "nothing to change, nothing sent")
         self.assertIsNotNone(scheduler.applied_slot.get(CLIMATE))
+
+    async def test_entity_without_declared_step_uses_the_card_fallback_grid(self):
+        # Home Assistant makes target_temp_step optional; the card falls back
+        # to 0.5, so saving through the same path must accept that grid.
+        scheduler, hass = self.scheduler(
+            {
+                CLIMATE: FakeState(
+                    "heat",
+                    min_temp=7,
+                    max_temp=30,
+                    hvac_modes=["off", "heat"],
+                    temperature=20,
+                )
+            },
+            {},
+        )
+        await scheduler.async_set_program(
+            CLIMATE,
+            True,
+            [climate_slot(temperature=20.5)],
+            None,
+            "heat",
+        )
+        self.assertIn(CLIMATE, scheduler.programs)
+        self.assertEqual(
+            hass.services.calls,
+            [("climate", "set_temperature", {"entity_id": CLIMATE, "temperature": 20.5})],
+        )
+        self.assertIsNone(scheduler.errors.get(CLIMATE))
+
+    async def test_enabling_an_empty_program_is_rejected(self):
+        scheduler, _ = self.scheduler({CLIMATE: entity()}, {})
+        await scheduler.async_set_program(CLIMATE, False, [], None, None)
+        with self.assertRaises(integration.ScheduleValidationError) as catch:
+            await scheduler.async_enable(CLIMATE, True)
+        self.assertEqual(catch.exception.code, "empty_enabled_program")
+        self.assertFalse(scheduler.programs[CLIMATE]["enabled"])
+
+    async def test_entity_removal_clears_the_applied_cache(self):
+        program = integration.validate_program([climate_slot()], True, None, "heat")
+        scheduler, _ = self.scheduler({CLIMATE: entity(temperature=21)}, {CLIMATE: program})
+        await scheduler.async_evaluate()
+        self.assertIn(CLIMATE, scheduler.applied_slot)
+        await scheduler.async_state_changed(
+            SimpleNamespace(
+                data={
+                    "entity_id": CLIMATE,
+                    "old_state": entity(temperature=21),
+                    "new_state": None,
+                }
+            )
+        )
+        self.assertNotIn(CLIMATE, scheduler.applied_slot)
 
     async def test_dual_slot_sends_the_pair_and_skips_when_aligned(self):
         program = integration.validate_program([dual_slot(low=18, high=22)], True, None, "heat_cool")

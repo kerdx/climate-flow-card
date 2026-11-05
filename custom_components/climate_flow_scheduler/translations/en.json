@@ -32,6 +32,9 @@
     "no_program": {
       "message": "No schedule exists for this climate entity."
     },
+    "entity_unavailable": {
+      "message": "The climate entity is unavailable; try again when it is back online."
+    },
     "invalid_enabled": {
       "message": "enabled must be boolean."
     },

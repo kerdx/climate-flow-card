@@ -135,7 +135,7 @@ class PackageTests(unittest.TestCase):
         service_error_codes = {
             "invalid_program", "invalid_time", "invalid_temperature",
             "invalid_hvac_mode", "unsupported_hvac_mode", "entity_validation_failed",
-            "no_program", "invalid_enabled", "invalid_slots", "too_many_slots",
+            "no_program", "entity_unavailable", "invalid_enabled", "invalid_slots", "too_many_slots",
             "empty_enabled_program", "invalid_away_temperature", "invalid_slot_schema",
             "invalid_slot_id", "duplicate_slot_id", "invalid_days", "duplicate_days",
             "same_start_end", "slots_overlap", "climate_range_unavailable",

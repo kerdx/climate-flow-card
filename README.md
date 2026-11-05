@@ -107,7 +107,7 @@ Each slot must use exactly one target shape:
   target_temp_high: 21
 ```
 
-Targets must fit the climate entity's temperature limits and step. Programs may contain both slot shapes. A mixed program must set `hvac_mode` to the mode for its single-target slots; range slots switch to `heat_cool` and the scheduler restores the configured mode at the next scalar slot. The entity must expose both modes. A program set to `hvac_mode: heat_cool` must use dual targets in every slot. The schedule editor offers a **Range** switch when the entity supports `heat_cool` and keeps it enabled for slots that already have a range.
+Targets must fit the climate entity's temperature limits and step. When the entity does not expose `target_temp_step`, the scheduler validates targets on the same 0.5° grid the card uses. Programs may contain both slot shapes. A mixed program must set `hvac_mode` to the mode for its single-target slots; range slots switch to `heat_cool` and the scheduler restores the configured mode at the next scalar slot. The entity must expose both modes. A program set to `hvac_mode: heat_cool` must use dual targets in every slot. The schedule editor offers a **Range** switch when the entity supports `heat_cool` and keeps it enabled for slots that already have a range.
 
 `hvac_mode` is optional; when set, it is applied before the target during and outside the slots. In a mixed program it is the scalar-slot mode, and the scheduler switches to `heat_cool` only for range slots. An optional outside-schedule temperature (`away_temperature`) sets a target outside slots; if it is absent, no target is sent outside slots. The optional `hvac_mode` is still applied outside slots even when no target is sent. The outside-schedule temperature is single-target and cannot be used when the program runs `heat_cool`. Manual overrides and vacation pauses are also single-target and cannot be used by a `heat_cool` program.
 
@@ -132,11 +132,15 @@ Other services enable/disable or delete a program, set a temporary manual overri
 
 Pauses and overrides survive a restart. The card shows them in its schedule dialog, and the diagnostic sensor reports an active pause as `pause` (`target`, `until`).
 
+Removing the integration's config entry keeps the stored programs, pauses, and overrides, so re-adding the integration restores them. To discard the schedules as well, delete `.storage/climate_flow_scheduler.programs` before re-adding the integration.
+
 Breaking rename: old integration entries, service calls, and stored schedules are not migrated. Services use the `climate_flow_scheduler` domain: `save_program`, `set_enabled`, `delete_program`, `set_manual_override`, `set_pause`, and `resume_program`.
 
 ## Development
 
 - JavaScript tests: `npm test`
 - Python tests: `python3 -m unittest discover -s tests_backend`
+- Python lint: `ruff check custom_components tests_backend` (rules configured in `pyproject.toml`)
+- Real Home Assistant compatibility: install `homeassistant==2025.1.0`, then run the Python tests; `tests_backend/test_real_homeassistant.py` exercises the real keyed state tracker instead of the stubs.
 
 See [issues](https://github.com/kerdx/climate-flow-card/issues) for bug reports and feature requests.

@@ -321,6 +321,30 @@ test('accent colour and surface options normalise, validate and reach the chrome
   assert.equal(sets.at(-1)[1], '500ms');
 });
 
+test('the scheduler sensor lookup scans the states once and then reuses its id', () => {
+  const sensor = {
+    entity_id: 'sensor.programs',
+    state: 'ready',
+    attributes: { scheduler_domain: 'climate_flow_scheduler', programs: {} },
+  };
+  let scans = 0;
+  const countingStates = (states) => new Proxy(states, {
+    ownKeys(target) { scans += 1; return Reflect.ownKeys(target); },
+  });
+  const card = configuredCard(defaultCardConfig('climate.living_room'));
+  card._hass = { states: countingStates({ 'sensor.programs': sensor }) };
+  assert.equal(card._scheduleSensor(), sensor);
+  assert.equal(scans, 1, 'the first lookup scans the state machine');
+  assert.equal(card._scheduleSensor(), sensor);
+  assert.equal(scans, 1, 'following ticks reuse the cached entity id');
+
+  // A moved sensor is discovered again and the cache follows it.
+  const replacement = { ...sensor, entity_id: 'sensor.programs_2' };
+  card._hass = { states: countingStates({ 'sensor.programs_2': replacement }) };
+  assert.equal(card._scheduleSensor(), replacement);
+  assert.equal(scans, 2, 'a stale cached id falls back to one rescan');
+});
+
 test('card background actions normalise and keep the historic toggle behaviour', () => {
   assert.deepEqual(CARD_ACTIONS, ['toggle', 'more-info', 'none']);
   assert.equal(normalizeCardAction('more-info', 'toggle'), 'more-info');

@@ -1,5 +1,15 @@
 # Changelog
 
+## v1.9.3
+
+- Accept climate entities that do not expose `target_temp_step`: targets are validated on the same 0.5° fallback grid the card uses instead of rejecting every program.
+- Track state changes only for climate entities that have a program, instead of receiving every state change in Home Assistant, and stop polling the diagnostic sensor.
+- Reject enabling an empty saved program with the same `empty_enabled_program` error used when saving one.
+- Preserve the original `ScheduleValidationError` translation metadata when a service call fails, so the Home Assistant UI can localize the message.
+- Repaint the card only when the climate entity or the programs sensor actually changes, and discover the scheduler sensor once per card instead of scanning every entity on each update.
+- Package releases from tracked files so generated `__pycache__` folders are excluded from the archive.
+- Add ruff linting and a CI job that runs the backend suite against a real Home Assistant 2025.1 install.
+
 ## v1.9.2
 
 - Make the heating indicator read at a glance: a larger amber-gradient badge with a white flame, a warm glow around both the badge and the entity icon, and a stronger pulse that respects the motion toggle and reduced-motion preference.

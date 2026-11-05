@@ -97,6 +97,7 @@ const build = ({ entity = climateEntity(), config = {}, programState, extraState
             'climate_flow_scheduler.programs': {
               entity_id: 'climate_flow_scheduler.programs',
               state: 'ready',
+              last_updated: '2026-10-26T09:00:00Z',
               attributes: { scheduler_domain: 'climate_flow_scheduler', programs: { 'climate.living_room': programState } },
             },
           }
@@ -596,6 +597,7 @@ test('a changed target, a sensor update or an aged timestamp reopens the gate', 
   card._hass.states['climate_flow_scheduler.programs'] = {
     entity_id: 'climate_flow_scheduler.programs',
     state: 'ready',
+    last_updated: '2026-10-26T09:01:00Z',
     attributes: { scheduler_domain: 'climate_flow_scheduler', programs: { 'climate.living_room': program([{ id: 'morning', days: [1], start: '08:00', end: '10:00', temperature: 21 }]) } },
   };
   card.hass = card._hass;

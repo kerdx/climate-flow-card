@@ -1539,12 +1539,14 @@ export class ClimateFlowCard extends HTMLElementBase {
     // attribute the card reads and the timestamps that age the relative
     // chip), the programs sensor, and the locale/unit environment. The HA
     // formatters are captured by presence: a hass that gains one repaints.
+    // The sensor payload can contain every program, so its last_updated is
+    // the signature: the backend writes the sensor whenever that changes.
     const entity = this._hass?.states?.[this.config?.entity];
     const sensor = this._scheduleSensor();
     return JSON.stringify([
       entity?.entity_id, entity?.state, entity?.last_changed, entity?.last_updated,
       entity?.attributes,
-      sensor?.entity_id, sensor?.state, sensor?.last_changed, sensor?.attributes,
+      sensor?.entity_id, sensor?.state, sensor?.last_changed, sensor?.last_updated,
       this._hass?.locale?.language, this._hass?.config?.unit_system?.temperature,
       typeof this._hass?.formatEntityState, typeof this._hass?.formatEntityAttributeValue,
     ]);
@@ -1910,7 +1912,14 @@ export class ClimateFlowCard extends HTMLElementBase {
     schedule.addEventListener('click', () => this._openSchedule());
   }
   _scheduleSensor() {
-    return Object.values(this._hass?.states || {}).find((state) => state?.attributes?.scheduler_domain === 'climate_flow_scheduler') || null;
+    // Cache the discovered entity id: the states lookup is an O(all entities)
+    // scan that would otherwise run on every hass tick of every card.
+    const states = this._hass?.states || {};
+    const cached = this._scheduleSensorId ? states[this._scheduleSensorId] : null;
+    if (cached?.attributes?.scheduler_domain === 'climate_flow_scheduler') return cached;
+    const found = Object.values(states).find((state) => state?.attributes?.scheduler_domain === 'climate_flow_scheduler') || null;
+    this._scheduleSensorId = found?.entity_id || null;
+    return found;
   }
   _dialGeometry(model) {
     // One shared description of the dial: the value arc plus every thumb, so

@@ -4,7 +4,6 @@ import unittest
 from datetime import datetime, timedelta, timezone
 import importlib.util
 import ast
-import re
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -579,8 +578,11 @@ class StorageMigrationTests(unittest.TestCase):
     def test_registered_steps_apply_in_order_and_set_the_target_version(self):
         old_one = DATA_MIGRATIONS.get(1)
         old_two = DATA_MIGRATIONS.get(2)
-        step_two = lambda payload: {"renamed": payload["programs"], "extra": True}
-        step_three = lambda payload: {**payload, "extra": payload["extra"] and "kept"}
+        def step_two(payload):
+            return {"renamed": payload["programs"], "extra": True}
+
+        def step_three(payload):
+            return {**payload, "extra": payload["extra"] and "kept"}
         DATA_MIGRATIONS.update({1: step_two, 2: step_three})
         def restore(version, old):
             if old is None:

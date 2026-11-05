@@ -70,7 +70,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ env.VERSION }}
         run: |
-          python3 -m zipfile -c "climate-flow-card-${VERSION}.zip" custom_components/climate_flow_scheduler/
+          # `git archive` only packages tracked files: no __pycache__, no editor
+          # droppings, and the archive root is the integration directory HACS
+          # expects.
+          git archive --format=zip --prefix=climate_flow_scheduler/ \
+            -o "climate-flow-card-${VERSION}.zip" \
+            HEAD:custom_components/climate_flow_scheduler
           gh release create "v${VERSION}" \
             "climate-flow-card-${VERSION}.zip" \
             --title "v${VERSION}" \

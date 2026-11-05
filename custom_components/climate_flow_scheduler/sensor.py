@@ -19,6 +19,7 @@ class SchedulerSensor(SensorEntity):
     _attr_unique_id = "climate_flow_scheduler_programs"
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_icon = "mdi:calendar-clock"
+    _attr_should_poll = False
 
     def __init__(self, scheduler):
         self.scheduler = scheduler

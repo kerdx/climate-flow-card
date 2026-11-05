@@ -137,6 +137,9 @@ def integration_module() -> types.ModuleType:
         spec.loader.exec_module(module)
     # Every test asserts against a deterministic clock instead of wall time.
     module.dt_util.now = lambda: CLOCK["now"]
+    # The fake hass has no event bus. State tracking is covered by the real
+    # Home Assistant CI job; the scheduler's routing logic is tested directly.
+    module.async_track_state_change_event = lambda *args, **kwargs: (lambda: None)
     return module
 
 

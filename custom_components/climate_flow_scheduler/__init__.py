@@ -15,7 +15,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, ServiceCall, callback
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import config_validation as cv
-from homeassistant.helpers.event import async_track_time_change
+from homeassistant.helpers.event import async_track_state_change_event, async_track_time_change
 from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
@@ -173,6 +173,23 @@ class Scheduler:
         restore_entity_state(snapshot)
         self._update_sensor()
 
+    def _refresh_state_tracking(self) -> None:
+        """Listen only for the climate entities that have a program.
+
+        A global ``state_changed`` listener creates a task for every state
+        update in the whole Home Assistant instance. ``async_track_state_change_event``
+        indexes listeners by entity id instead, so unrelated sensors never
+        reach this scheduler. The tracked set changes when a program is added
+        or deleted, which is rare.
+        """
+        if self.unsub_state is not None:
+            self.unsub_state()
+            self.unsub_state = None
+        if self.programs:
+            self.unsub_state = async_track_state_change_event(
+                self.hass, list(self.programs), self.async_state_changed
+            )
+
     def sensor_programs(self) -> dict[str, dict[str, Any]]:
         now = dt_util.now()
         result: dict[str, dict[str, Any]] = {}
@@ -222,6 +239,7 @@ class Scheduler:
             except BaseException:
                 self._rollback_entity(snapshot)
                 raise
+        self._refresh_state_tracking()
         if enabled:
             await self.async_evaluate(entity_id)
 
@@ -229,6 +247,13 @@ class Scheduler:
         async with self._evaluation_lock:
             if entity_id not in self.programs:
                 raise ScheduleValidationError("No schedule exists for this climate entity", code="no_program")
+            if enabled and not self.programs[entity_id]["slots"]:
+                # Saving an enabled empty program is already rejected; the
+                # separate enable toggle must enforce the same rule.
+                raise ScheduleValidationError(
+                    "An enabled program needs at least one slot",
+                    code="empty_enabled_program",
+                )
             if enabled:
                 state = self.hass.states.get(entity_id)
                 try:
@@ -271,6 +296,7 @@ class Scheduler:
             except BaseException:
                 self._rollback_entity(snapshot)
                 raise
+        self._refresh_state_tracking()
 
     def _set_error(self, entity_id: str, code: str, message: str, *, log: bool = False) -> None:
         self.errors[entity_id] = error_entry(code, message)
@@ -435,8 +461,10 @@ class Scheduler:
             try:
                 await self.async_save()
             except BaseException:
-                if old is None: self.overrides.pop(entity_id, None)
-                else: self.overrides[entity_id] = old
+                if old is None:
+                    self.overrides.pop(entity_id, None)
+                else:
+                    self.overrides[entity_id] = old
                 raise
         await self.async_evaluate(entity_id)
 
@@ -465,9 +493,12 @@ class Scheduler:
             try:
                 await self.async_save()
             except BaseException:
-                if old_pause is None: self.pauses.pop(entity_id, None)
-                else: self.pauses[entity_id] = old_pause
-                if old_override is not None: self.overrides[entity_id] = old_override
+                if old_pause is None:
+                    self.pauses.pop(entity_id, None)
+                else:
+                    self.pauses[entity_id] = old_pause
+                if old_override is not None:
+                    self.overrides[entity_id] = old_override
                 raise
         await self.async_evaluate(entity_id)
 
@@ -480,16 +511,27 @@ class Scheduler:
                 try:
                     await self.async_save()
                 except BaseException:
-                    if old_override is not None: self.overrides[entity_id] = old_override
-                    if old_pause is not None: self.pauses[entity_id] = old_pause
+                    if old_override is not None:
+                        self.overrides[entity_id] = old_override
+                    if old_pause is not None:
+                        self.pauses[entity_id] = old_pause
                     self._update_sensor()
                     raise
         await self.async_evaluate(entity_id)
 
     async def async_state_changed(self, event: Any) -> None:
         entity_id = event.data.get("entity_id")
+        # The tracker is already scoped to programmed entities, but keep the
+        # check before the lock so a stray event never waits behind evaluation.
+        if entity_id not in self.programs:
+            return
         old, new = event.data.get("old_state"), event.data.get("new_state")
         if not new:
+            # An entity removed and re-added at runtime may have lost its
+            # target while the applied-slot cache survived. Clearing the cache
+            # makes the next tick reapply the program.
+            self.applied_slot.pop(entity_id, None)
+            self.pending.discard(entity_id)
             return
         retry = False
         config_retry = False
@@ -529,10 +571,20 @@ class Scheduler:
             await self.async_evaluate(entity_id)
 
 
+# Home Assistant treats ``target_temperature_step`` as optional: entities
+# without one omit the attribute. The card falls back to 0.5 in that case, so
+# validation uses the same grid instead of rejecting every target.
+DEFAULT_TARGET_TEMPERATURE_STEP = 0.5
+
+
 def _step(state: Any) -> float:
     try:
-        step = float(state.attributes["target_temp_step"])
         minimum, maximum = float(state.attributes["min_temp"]), float(state.attributes["max_temp"])
+        raw_step = state.attributes.get("target_temp_step")
+        if raw_step in (None, "", "unknown", "unavailable"):
+            step = DEFAULT_TARGET_TEMPERATURE_STEP
+        else:
+            step = float(raw_step)
     except (KeyError, TypeError, ValueError) as err:
         raise HomeAssistantError("Climate temperature range or step is unavailable") from err
     if not all(math.isfinite(v) for v in (step, minimum, maximum)) or step <= 0 or minimum >= maximum:
@@ -706,7 +758,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: Any) -> bool:
             entity = call.data.get("climate_entity")
             if entity:
                 await scheduler.async_report_error(entity, err)
-            raise HomeAssistantError(str(err)) from err
+            # Keep the original exception: its translation metadata is what
+            # lets Home Assistant localize the service error.
+            raise
 
     async def enable(call: ServiceCall) -> None:
         try:
@@ -726,7 +780,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: Any) -> bool:
         lambda _: hass.async_create_task(scheduler.async_evaluate()),
         second=0,
     )
-    scheduler.unsub_state = hass.bus.async_listen("state_changed", scheduler.async_state_changed)
+    scheduler._refresh_state_tracking()
     await scheduler.async_evaluate()
     return True
 

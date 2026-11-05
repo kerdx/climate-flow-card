@@ -32,6 +32,9 @@
     "no_program": {
       "message": "Non esiste una pianificazione per questa entità climate."
     },
+    "entity_unavailable": {
+      "message": "L'entità climate non è disponibile; riprova quando torna online."
+    },
     "invalid_enabled": {
       "message": "enabled deve essere booleano."
     },
